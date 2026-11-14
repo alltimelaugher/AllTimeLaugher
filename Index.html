@@ -831,6 +831,7 @@ const L_ANS=_L.get('answer'), L_VID=_L.get('video')==='1', L_FROM=_L.get('from')
 if(location.search) history.replaceState(null,'',location.pathname);
 
 // ================= accounts =================
+function adminShow(on){ const b=$('adminBtn'); if(b) b.style.display=on?'block':'none'; document.querySelectorAll('#adminTile,.tile-app').forEach(t=>{ if(t.id==='adminTile'||/^🛡/.test(t.textContent.trim())) t.style.display=on?'block':'none'; }); }
 function showName(){ $('display-username').innerText = me ? '👤 '+me+' · Log out' : ''; $('heroName').innerText = me; }
 function showAuth(msg){ $('authModal').style.display='flex'; if(msg) $('authMsg').innerText=msg; }
 function setAuthMode(m,msg){
@@ -863,8 +864,8 @@ socket.on('auth_ok',({name,token,admin,owner})=>{
   me=name; localStorage.setItem('token',token); localStorage.setItem('saved_name',name);
   if(pendingCred && window.PasswordCredential){ try{ navigator.credentials.store(new PasswordCredential({id:pendingCred.name,password:pendingCred.password,name})); }catch(e){} }
   pendingCred=null;
-  $('adminBtn').style.display = admin ? 'block' : 'none'; $('adminTile').style.display = admin ? 'block' : 'none';
-  $('authModal').style.display='none'; $('authPass').value=''; $('authPass2').value=''; showName();
+  $('authModal').style.display='none'; $('authPass').value=''; $('authPass2').value='';
+  try{ adminShow(!!admin); showName(); }catch(e){ console.error(e); }
 });
 socket.on('auth_fail',()=>{ ['token','saved_name','chat_cache'].forEach(k=>localStorage.removeItem(k)); me=''; showName(); setAuthMode('login','Please log in again'); showAuth(); });
 socket.on('auth_error',m=>{ pendingCred=null; $('authMsg').innerText=m; });
@@ -880,7 +881,7 @@ async function logout(){
   socket.emit('logout',{token:localStorage.getItem('token'),endpoint:ep});
   ['token','saved_name','chat_cache','outbox'].forEach(k=>localStorage.removeItem(k));
   outbox=[]; me=''; globalMsgs=[]; dms={}; friends=[]; requests=[]; blocks=[]; directory=[]; dirMap={}; unread={}; cur='global'; profileLoaded=false; SHOP.fx=0;
-  $('adminBtn').style.display='none'; $('adminTile').style.display='none';
+  adminShow(false);
   goHome(); showName(); refreshLists(); renderChat(); setAuthMode('signup'); showAuth();
 }
 fetch((SERVER_URL||'')+'/config').then(r=>r.json()).then(c=>{
@@ -902,6 +903,9 @@ function phReset(){ phNumber=''; $('phStep2').style.display='none'; $('phStep1')
 socket.on('phone_sent',({phone})=>{ phNumber=phone; $('phStep1').style.display='none'; $('phStep2').style.display='block'; $('authMsg').innerText='Code sent to '+phone; $('phCode').focus(); });
 socket.on('phone_need_name',({error})=>{ const n=prompt((error?error+'\n':'')+'Phone verified! Choose your display name (spaces allowed):',''); if(n&&n.trim()) socket.emit('phone_name',{phone:phNumber,name:n.trim()}); else phReset(); });
 socket.on('auth_ok',()=>phReset());
+socket.on('init',()=>{ window._initSeen=1; try{ sessionStorage.removeItem('rl'); }catch(e){} });
+socket.on('auth_ok',()=>{ window._initSeen=0; setTimeout(()=>{ let tried=0; try{ tried=sessionStorage.getItem('rl'); }catch(e){}
+  if(!tried&&localStorage.getItem('token')&&($('authModal').style.display==='flex'||!window._initSeen)){ try{ sessionStorage.setItem('rl','1'); }catch(e){} location.reload(); } },2500); });
 socket.on('google_need_name',({suggested,error})=>{
   const n=prompt((error?error+'\n':'')+'Choose your display name (spaces allowed):',suggested||'');
   if(n&&n.trim()) socket.emit('google_auth',{credential:pendingGoogle,name:n.trim(),clientId});
@@ -1140,7 +1144,8 @@ function recModeSet(m){ if(REC) return toast('Stop the current recording first')
   $('recStopBtn').innerHTML=m==='live'?'⏹ Stop live':'⏹ Stop &amp; save'; }
 async function recStart(){
   if(REC) return toast('Already recording');
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia) return toast('📱 Screen recording is not supported on phone browsers. Use a laptop.');
+  if(!navigator.mediaDevices) return toast('Recording is not supported in this browser.');
+  const hasScr=!!navigator.mediaDevices.getDisplayMedia; if(!hasScr) toast('📱 Phone browsers cannot capture the screen, so your camera is used instead.');
   // 1) audio engine created + resumed right at the click (browsers keep it silent otherwise = "mic not working")
   const AC=window.AudioContext||window.webkitAudioContext, ctx=new AC();
   try{ await ctx.resume(); }catch(e){}
@@ -1152,11 +1157,11 @@ async function recStart(){
   }
   // 3) then the screen
   let screen;
-  try{ screen=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:$('recSys').checked}); }
+  try{ screen=hasScr?await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:$('recSys').checked}):await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false}); }
   catch(e){ if(mic) mic.getTracks().forEach(t=>t.stop()); ctx.close(); return toast('Recording cancelled'); }
   const dest=ctx.createMediaStreamDestination(), parts=[];
   if(screen.getAudioTracks().length){ ctx.createMediaStreamSource(new MediaStream(screen.getAudioTracks())).connect(dest); parts.push('device sound'); }
-  else if($('recSys').checked) toast('No device sound captured: tick "Also share tab/system audio" in the share window.');
+  else if($('recSys').checked&&hasScr) toast('No device sound captured: tick "Also share tab/system audio" in the share window.');
   if(mic&&mic.getAudioTracks().length){ const g=ctx.createGain(); g.gain.value=1.5; ctx.createMediaStreamSource(mic).connect(g); g.connect(dest); parts.push('microphone'); }
   const out=new MediaStream([...screen.getVideoTracks(),...(parts.length?dest.stream.getAudioTracks():[])]);
   if(recMode==='live'){ // LIVE: nothing is recorded or saved, no time limit
@@ -1304,7 +1309,7 @@ function admSetOwner(e,on){ const name=decodeURIComponent(e); if(confirm((on?'Ma
 function admSetAdmin(e,on){ socket.emit('set_admin',{name:decodeURIComponent(e),on}); }
 function admAddWord(){ const w=$('admWord').value.trim(); if(w){ socket.emit('admin_word',{word:w}); $('admWord').value=''; } }
 function admDelWord(e){ socket.emit('admin_word',{word:decodeURIComponent(e),del:true}); }
-socket.on('role_update',r=>{ myRole=r.admin?'admin':''; $('adminBtn').style.display=r.admin?'block':'none'; $('adminTile').style.display=r.admin?'block':'none'; });
+socket.on('role_update',r=>{ myRole=r.admin?'admin':''; adminShow(!!r.admin); });
 socket.on('banned',b=>{
   $('banReason').innerText='Reason: '+(b.reason||'No reason given');
   $('banUntil').innerText=b.until?'Ban ends at '+new Date(b.until).toLocaleTimeString():'This ban is permanent';
@@ -2530,9 +2535,11 @@ function mkApp(id,title,icon,label,body){
   const m=el('div',{id,class:'modal'});
   m.append(el('div',{class:'modal-header'},el('h3',{},title),el('button',{class:'close-btn',onclick:()=>closeModal(id)},'X')));
   const b=el('div',{class:'modal-body'}); b.append(body); m.append(b); document.body.append(m);
+  if(GAMEIDS.includes(id)){ GAMELIST.push({id,icon,label,title}); return; }
   $('side').append(el('button',{class:'nav more',onclick:()=>openModal(id)},icon,el('span',{},label)));
   const tiles=document.querySelector('.tiles'); tiles.insertBefore(el('div',{class:'tile-app',onclick:()=>openModal(id)},el('i',{},icon),label),tiles.lastElementChild);
 }
+const GAMEIDS=['ludApp','snakeApp','g48App','c4App','flApp','mmApp','slApp','rcApp','mzApp','dbApp','quizApp'], GAMELIST=[];
 
 /* ---------- 1) (multitasking removed) apps open one at a time, full screen, like the original ---------- */
 const _openModal=openModal;
@@ -2883,7 +2890,7 @@ const _omL=openModal; openModal=function(id){ _omL(id); if(id==='ludApp'&&!LUD&&
 
 /* ===== Personalize (Settings): dock, widget, icons ===== */
 const PZ=(()=>{ try{ return JSON.parse(localStorage.getItem('pz'))||{}; }catch(e){ return {}; } })();
-const PZD={dock:['Messages','Calls','Friends','Games'],dockCol:'#1c0606',dockA:86,wgCol:'#b71c1c',wgA:100,wgTx:'#ffffff',wgNote:'Hello 👋',topCol:'#230a0a',topA:100,topTx:'#e5b3b3',topOnly:0,ntCol:'#5c1818',ntA:100,ntTx:'#ffffff',sbCol:'#0c0202'};
+const PZD={dock:['Messages','Calls','Friends','Games'],dockCol:'#1c0606',dockA:86,wgCol:'#b71c1c',wgA:100,wgTx:'#ffffff',wgNote:'Hello 👋',topCol:'#230a0a',topA:100,topTx:'#e5b3b3',topOnly:0,ntCol:'#5c1818',ntA:100,ntTx:'#ffffff',sbCol:'#0c0202',sideCol:'#1c0606',sideA:100};
 const pzg=k=>PZ[k]!==undefined?PZ[k]:PZD[k];
 const pzHex=(h,a)=>{ const n=parseInt(h.slice(1),16); return 'rgba('+(n>>16)+','+(n>>8&255)+','+(n&255)+','+a/100+')'; };
 const pzCss=document.createElement('style'); pzCss.id='pzCss'; document.head.append(pzCss);
@@ -2894,7 +2901,7 @@ function pzApply(save){
   const wa=pzg('wgA');
   pzCss.textContent='@media (max-width:899px){#side .nav{display:none!important}#side .nav.dk{display:flex!important}#side{background:'+pzHex(pzg('dockCol'),pzg('dockA'))+'!important;'+(pzg('dockA')<5?'border-color:transparent!important;box-shadow:none!important;':'')+'}}'
    +'.wg{background:'+pzHex(pzg('wgCol'),wa)+'!important;'+(wa<5?'border-color:transparent!important;box-shadow:none!important;':'')+'}.wg-time,.wg-date,.wg-hi,.wg-note{color:'+pzg('wgTx')+'!important}.wg-note{margin-top:6px;font-size:14px;opacity:.9}';
-  pzCss.textContent+='.topbar{background:'+pzHex(pzg('topCol'),pzg('topA'))+'!important;color:'+pzg('topTx')+'!important;'+(pzg('topA')<5?'border-color:transparent!important;':'')+'}#display-username{color:'+pzg('topTx')+'!important}'+(pzg('topOnly')?'.topbar>span:first-child,.topbar>span:last-child button{display:none!important}.topbar{justify-content:flex-end}':'')+'#toast{background:'+pzHex(pzg('ntCol'),pzg('ntA'))+'!important;color:'+pzg('ntTx')+'!important}';
+  pzCss.textContent+='@media (min-width:900px){#side{background:'+pzHex(pzg('sideCol'),pzg('sideA'))+'!important;'+(pzg('sideA')<5?'border-color:transparent!important;':'')+'}}.topbar{background:'+pzHex(pzg('topCol'),pzg('topA'))+'!important;color:'+pzg('topTx')+'!important;'+(pzg('topA')<5?'border-color:transparent!important;':'')+'}#display-username{color:'+pzg('topTx')+'!important}'+(pzg('topOnly')?'.topbar>span:first-child,.topbar>span:last-child button{display:none!important}.topbar{justify-content:flex-end}':'')+'#toast{background:'+pzHex(pzg('ntCol'),pzg('ntA'))+'!important;color:'+pzg('ntTx')+'!important}';
   const tm=document.querySelector('meta[name=theme-color]'); if(tm) tm.content=pzg('sbCol');
   const w=document.querySelector('.wg'); if(w){ let n=w.querySelector('.wg-note'); if(!n){ n=document.createElement('div'); n.className='wg-note'; w.querySelector('.wg-date').after(n); } n.textContent=pzg('wgNote'); n.style.display=pzg('wgNote')?'':'none'; }
 }
@@ -2911,6 +2918,9 @@ function pzUI(){
    +'<div class="user-card"><div>Widget opacity (left = transparent)</div><input type="range" id="pzWa" min="0" max="100" value="'+pzg('wgA')+'"></div>'
    +'<div class="user-card"><div>Text colour</div><input type="color" id="pzWt" value="'+pzg('wgTx')+'" style="width:70px;height:34px"></div>'
    +'<input type="text" id="pzWn" maxlength="40" placeholder="Text inside widget" value="'+pzg('wgNote').replace(/"/g,'&quot;')+'" style="width:100%;margin-top:6px">'
+   +'<h4>📋 Side bar (computer / tablet)</h4>'
+   +'<div class="user-card"><div>Side bar colour</div><input type="color" id="pzSc" value="'+pzg('sideCol')+'" style="width:70px;height:34px"></div>'
+   +'<div class="user-card"><div>Transparency (left = clear)</div><input type="range" id="pzSa" min="0" max="100" value="'+pzg('sideA')+'"></div>'
    +'<h4>🔝 Top bar</h4>'
    +'<div class="user-card"><div>Bar colour</div><input type="color" id="pzTc" value="'+pzg('topCol')+'" style="width:70px;height:34px"></div>'
    +'<div class="user-card"><div>Transparency (left = clear)</div><input type="range" id="pzTa" min="0" max="100" value="'+pzg('topA')+'"></div>'
@@ -2928,7 +2938,7 @@ function pzUI(){
   const h=document.querySelector('#settingsModal .modal-body h4'); h.parentNode.insertBefore(d,h);
   d.addEventListener('change',e=>{ if(e.target.classList.contains('pzDk')){ PZ.dock=[...d.querySelectorAll('.pzDk')].map(s=>s.value).filter(Boolean); pzApply(1); } });
   const bind=(id,k,f)=>d.querySelector('#'+id).addEventListener('input',e=>{ PZ[k]=f?f(e.target.value):e.target.value; pzApply(1); });
-  bind('pzDc','dockCol'); bind('pzDa','dockA',Number); bind('pzWc','wgCol'); bind('pzWa','wgA',Number); bind('pzWt','wgTx'); bind('pzWn','wgNote'); bind('pzTc','topCol'); bind('pzTa','topA',Number); bind('pzTt','topTx'); bind('pzSb','sbCol'); bind('pzNc','ntCol'); bind('pzNa','ntA',Number); bind('pzNt','ntTx');
+  bind('pzDc','dockCol'); bind('pzDa','dockA',Number); bind('pzWc','wgCol'); bind('pzWa','wgA',Number); bind('pzWt','wgTx'); bind('pzWn','wgNote'); bind('pzTc','topCol'); bind('pzSc','sideCol'); bind('pzSa','sideA',Number); bind('pzTa','topA',Number); bind('pzTt','topTx'); bind('pzSb','sbCol'); bind('pzNc','ntCol'); bind('pzNa','ntA',Number); bind('pzNt','ntTx');
   d.querySelector('#pzTo').addEventListener('change',e=>{ PZ.topOnly=e.target.checked?1:0; pzApply(1); });
   d.querySelector('#pzIc').addEventListener('input',e=>tsColor(e.target.value));
 }
@@ -2937,7 +2947,61 @@ const _omP=openModal; openModal=function(id){ if(id==='settingsModal'){ const L=
 pzUI(); setTimeout(()=>pzApply(0),300); setTimeout(()=>pzApply(0),1500);
 
 /* ===== More games: Memory Match, Connect Four (vs computer), Flappy ===== */
+const gRew=(g,sc)=>socket.emit('game_reward',{game:g,win:true,score:sc});
+/* Memory Match */
+const mmBody=el('div',{style:{textAlign:'center'}});
+mmBody.innerHTML='<div id="mmInfo" style="margin:6px"></div><div id="mmGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:340px;margin:8px auto"></div><button class="btn" onclick="mmNew()">🔄 New game</button>';
+mkApp('mmApp','Memory Match','🧠','Memory',mmBody);
+let MM=null;
+function mmNew(){ const e=['🍎','🐶','🚗','⚽','🌙','🎲','🍕','🐱'], a=[...e,...e].sort(()=>Math.random()-.5); MM={a,open:[],done:new Set(),mv:0,lock:0}; mmDraw(); }
+function mmDraw(){ $('mmGrid').innerHTML=MM.a.map((x,i)=>{ const s=MM.done.has(i)||MM.open.includes(i); return '<button onclick="mmTap('+i+')" style="height:72px;font-size:32px;border-radius:12px;border:0;background:'+(s?'#fff':'#b71c1c')+'">'+(s?x:'?')+'</button>'; }).join(''); $('mmInfo').textContent='Moves: '+MM.mv+'   Pairs: '+MM.done.size/2+'/8'; }
+window.mmTap=i=>{ const M=MM; if(M.lock||M.open.includes(i)||M.done.has(i)) return; M.open.push(i); mmDraw();
+  if(M.open.length===2){ M.mv++; const [a,b]=M.open;
+    if(M.a[a]===M.a[b]){ M.done.add(a); M.done.add(b); M.open=[]; mmDraw(); if(M.done.size===16){ $('mmInfo').textContent='🎉 Done in '+M.mv+' moves!'; gRew('memory',100); } }
+    else{ M.lock=1; setTimeout(()=>{ M.open=[]; M.lock=0; mmDraw(); },700); } } };
+/* Connect Four vs computer */
+const c4Body=el('div',{style:{textAlign:'center'}});
+c4Body.innerHTML='<div id="c4Info" style="margin:6px"></div><div id="c4G" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:340px;margin:auto;background:#1565c0;padding:6px;border-radius:10px"></div><button class="btn" style="margin-top:8px" onclick="c4New()">🔄 New game</button>';
+mkApp('c4App','Connect Four','🔴','Connect 4',c4Body);
+let C4=null;
+function c4New(){ C4={b:Array.from({length:6},()=>Array(7).fill(0)),over:0,t:1,msg:'Your turn (red) – tap a column'}; c4Draw(); }
+const c4Win=(b,p)=>{ for(let r=0;r<6;r++) for(let c=0;c<7;c++) for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){ let k=0; for(;k<4;k++){ const y=r+dr*k,x=c+dc*k; if(y<0||y>5||x<0||x>6||b[y][x]!==p) break; } if(k===4) return 1; } return 0; };
+const c4Row=(b,c)=>{ for(let r=5;r>=0;r--) if(!b[r][c]) return r; return -1; };
+function c4Draw(){ const S=C4; $('c4G').innerHTML=S.b.map(row=>row.map((v,c)=>'<div onclick="c4Drop('+c+')" style="aspect-ratio:1;border-radius:50%;background:'+(v===1?'#e53935':v===2?'#fdd835':'#0d47a1')+'"></div>').join('')).join(''); $('c4Info').textContent=S.msg; }
+window.c4Drop=c=>{ const S=C4; if(!S||S.over||S.t!==1) return; const r=c4Row(S.b,c); if(r<0) return; S.b[r][c]=1;
+  if(c4Win(S.b,1)){ S.over=1; S.msg='🏆 You win!'; c4Draw(); gRew('c4',100); return; }
+  S.t=2; S.msg='Computer is thinking…'; c4Draw();
+  setTimeout(()=>{ if(C4!==S) return; let col=-1;
+    for(const p of [2,1]){ for(let c2=0;c2<7;c2++){ const r2=c4Row(S.b,c2); if(r2<0) continue; S.b[r2][c2]=p; const w=c4Win(S.b,p); S.b[r2][c2]=0; if(w){ col=c2; break; } } if(col>=0) break; }
+    if(col<0){ const o=[3,2,4,1,5,0,6].filter(x=>c4Row(S.b,x)>=0); col=o.length?o[Math.floor(Math.random()*Math.min(3,o.length))]:-1; }
+    if(col<0){ S.over=1; S.msg='Draw'; c4Draw(); return; }
+    S.b[c4Row(S.b,col)][col]=2; if(c4Win(S.b,2)){ S.over=1; S.msg='Computer wins'; } else S.msg='Your turn'; S.t=1; c4Draw(); },500); };
+/* Flappy */
+const flBody=el('div',{style:{textAlign:'center'}});
+flBody.innerHTML='<canvas id="flCv" width="240" height="360" style="height:60vh;max-height:420px;border-radius:8px;background:#4fc3f7;touch-action:none"></canvas><div id="flInfo" style="margin:4px">Tap to flap</div>';
+mkApp('flApp','Flappy','🐤','Flappy',flBody);
+let FL=null;
+function flNew(){ FL={y:180,v:0,p:[],f:0,s:0,over:0}; flLoop(); }
+window.flTap=()=>{ if(!FL||FL.over) return flNew(); FL.v=-5.5; };
+$('flCv').addEventListener('pointerdown',()=>flTap());
+document.addEventListener('keydown',e=>{ if(e.code==='Space'&&$('flApp').style.display==='flex'){ e.preventDefault(); flTap(); } });
+function flLoop(){ const F=FL; if(!F||F.over||$('flApp').style.display!=='flex') return; F.v+=.35; F.y+=F.v; F.f++;
+  if(F.f%90===0) F.p.push({x:240,g:80+Math.random()*190}); F.p.forEach(p=>p.x-=2); F.p=F.p.filter(p=>p.x>-50);
+  F.p.forEach(p=>{ if(!p.d&&p.x+40<40){ p.d=1; F.s++; } if(p.x<60&&p.x+40>40&&(F.y<p.g-48||F.y>p.g+48)) F.over=1; }); if(F.y<0||F.y>360) F.over=1;
+  const c=$('flCv').getContext('2d'); c.fillStyle='#4fc3f7'; c.fillRect(0,0,240,360); c.fillStyle='#2e7d32'; F.p.forEach(p=>{ c.fillRect(p.x,0,40,p.g-48); c.fillRect(p.x,p.g+48,40,360); });
+  c.font='24px sans-serif'; c.fillText('🐤',38,F.y+8); $('flInfo').textContent='Score '+F.s+(F.over?' – game over, tap to retry':'');
+  if(F.over){ if(F.s>=5) gRew('flap',F.s*10); } else requestAnimationFrame(flLoop); }
+const _omG3=openModal; openModal=function(id){ _omG3(id); if(id==='mmApp'&&!MM) mmNew(); if(id==='c4App'&&!C4) c4New(); if(id==='flApp'&&!FL) flNew(); };
 const mgCss=document.createElement('style'); mgCss.textContent='.mm{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:360px;margin:10px auto}.mmc{aspect-ratio:1;border-radius:12px;background:#5c1818;border:2px solid #7a2a2a;font-size:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:transparent;user-select:none}.mmc.up{background:#fff8e1;color:#000}.mmc.ok{background:#2e7d32;color:#fff;border-color:#66bb6a}.c4{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:360px;margin:10px auto;background:#1e5fd6;padding:8px;border-radius:12px}.c4 b{aspect-ratio:1;border-radius:50%;background:#0b1f4d;cursor:pointer}.c4 b.r{background:#e53935}.c4 b.y{background:#fdd835}'; document.head.append(mgCss);
+/* ===== all game apps live in the Games section only ===== */
+setTimeout(()=>{
+  const body=document.querySelector('#gamesModal .modal-body'); if(!body||document.getElementById('gamesMore')) return;
+  const d=document.createElement('div'); d.id='gamesMore'; d.innerHTML='<h4>🎮 More games</h4><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px"></div>';
+  GAMELIST.forEach(g=>{ const b=document.createElement('button'); b.className='btn'; b.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;background:#2a0b0b;border:1px solid #4a1a1a'; b.innerHTML='<span style="font-size:28px">'+g.icon+'</span><span style="font-size:11px">'+g.label+'</span>'; b.onclick=()=>openModal(g.id); d.lastChild.append(b); });
+  body.insertBefore(d,body.firstChild);
+},0);
+const _cmG=closeModal; closeModal=function(id){ _cmG(id); if(GAMEIDS.includes(id)&&!window._noRet) openGames(); };
+const _ghG=goHome; goHome=function(){ window._noRet=1; try{ _ghG(); }finally{ window._noRet=0; } };
 /* Snakes & Ladders: you vs 1-3 computer players */
 const slBody=el('div',{style:{textAlign:'center'}});
 slBody.innerHTML='<div>Computer players: <select id="slN"><option>1</option><option>2</option><option>3</option></select> <button class="btn sm green" onclick="slNew()">▶ Start</button></div><canvas id="slCv" width="300" height="300" style="width:100%;max-width:400px;margin-top:8px;border-radius:8px"></canvas><div id="slInfo" style="margin:6px;min-height:20px"></div><button class="btn" id="slRoll" onclick="slRoll()">🎲 Roll</button>';
@@ -3035,7 +3099,7 @@ addEventListener('keydown',e=>{
 });
 
 /* ===== make the buttons reachable from onclick="..." (functions inside this block are private unless put on window) ===== */
-window.snNew=snNew; window.g48New=g48New; window.ludRoll=ludRoll; window.ludNew=ludNew; window.reportUser=reportUser;
+window.LSET=LSET; window.mmNew=mmNew; window.c4New=c4New; window.flNew=flNew; window.ludSetup=ludSetup; window.ludMenu=ludMenu; window.ludStartAI=ludStartAI; window.ludInvite=ludInvite; window.ludGo=ludGo; window.slNew=slNew; window.slRoll=slRoll; window.rcNew=rcNew; window.mzNew=mzNew; window.snNew=snNew; window.g48New=g48New; window.ludRoll=ludRoll; window.ludNew=ludNew; window.reportUser=reportUser;
 window.giftBtn=u=>'<button class="btn sm" title="Gift coins" onclick="giftCoins(\''+enc(u)+'\')">🎁</button>';
 window.giftCoins=e=>openGift(decodeURIComponent(e));
 })();
