@@ -2928,11 +2928,11 @@ aiAdd('assistant','Hi! I\'m Claude. Ask me anything.');
 (function(){
   const ua=/SMART-TV|SmartTV|Tizen|Web0S|WebOS|AndroidTV|Android TV|BRAVIA|HbbTV|Roku|AFTM|CrKey/i.test(navigator.userAgent);
   const wide=window.innerWidth>=800;
-  if(_L.get('tvmode')==='1'&&wide) localStorage.setItem('tvmode','1');
-  if(_L.get('tvmode')==='0'||!wide) localStorage.setItem('tvmode','0');
-  const TVM=wide&&localStorage.getItem('tvmode')!=='0'&&(localStorage.getItem('tvmode')==='1'||ua);
-  window.tvOn=()=>{ if(!wide) return toast('TV mode is only for big screens (a TV or computer), not phones.'); localStorage.setItem('tvmode','1'); location.reload(); }; window.tvOff=()=>{ localStorage.setItem('tvmode','0'); location.reload(); };
-  const css=document.createElement('style'); css.textContent='body.tv{zoom:1.3}body.tv :focus{outline:4px solid #ff9100!important;outline-offset:2px}#tvLogin{overflow:auto;position:fixed;inset:0;z-index:10000;background:#0c0202;color:#fff;display:none;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap;padding:24px}#tvLogin .box{background:#fff;padding:14px;border-radius:14px;width:244px;height:244px;display:flex;align-items:center;justify-content:center;margin:auto}#tvCode{font-size:44px;letter-spacing:8px;font-weight:700;text-align:center;margin-top:14px;color:#ffb300}';
+  if(_L.get('tvmode')==='1') localStorage.setItem('tvmode','1');
+  if(_L.get('tvmode')==='0') localStorage.setItem('tvmode','0');
+  const TVM=localStorage.getItem('tvmode')==='1'||(ua&&localStorage.getItem('tvmode')!=='0');
+  window.tvOn=()=>{ localStorage.setItem('tvmode','1'); location.reload(); }; window.tvOff=()=>{ localStorage.setItem('tvmode','0'); location.reload(); };
+  const css=document.createElement('style'); css.textContent='@media(min-width:800px){body.tv{zoom:1.3}}@media(max-width:799px){#tvLogin{flex-direction:column;gap:16px;justify-content:flex-start;padding-top:56px}#tvCode{font-size:32px}#tvLogin h1{font-size:22px}#tvLogin ol{font-size:16px!important}}body.tv :focus{outline:4px solid #ff9100!important;outline-offset:2px}#tvLogin{overflow:auto;position:fixed;inset:0;z-index:10000;background:#0c0202;color:#fff;display:none;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap;padding:24px}#tvLogin .box{background:#fff;padding:14px;border-radius:14px;width:244px;height:244px;display:flex;align-items:center;justify-content:center;margin:auto}#tvCode{font-size:44px;letter-spacing:8px;font-weight:700;text-align:center;margin-top:14px;color:#ffb300}';
   document.head.append(css);
   const ov=document.createElement('div'); ov.id='tvLogin';
   ov.innerHTML='<div style="text-align:center"><div class="box" id="tvQr">QR…</div><div id="tvCode">······</div><div style="color:#aaa;margin-top:6px">Code is valid for 10 minutes</div></div><button class="btn gray" id="tvOff" style="position:absolute;top:12px;right:12px">✕ Not a TV – back to normal</button><div style="max-width:480px"><h1 style="margin:0 0 14px;color:#ff8a80">📺 Gemini OS on TV</h1><ol style="font-size:20px;line-height:1.7;padding-left:22px"><li>Scan the QR code with your phone camera.<br><small style="color:#aaa">Or open <b id="tvUrl"></b> on your phone → Settings → <i>TV</i> and type the code.</small></li><li>On your phone choose <b>Google</b>, <b>Login</b> or <b>Sign up</b>.</li><li>Tap <b>Approve</b> – this TV signs in by itself.</li></ol><button class="btn" id="tvHere" style="font-size:20px;padding:14px 24px;margin-top:8px">⌨ Log in on this TV instead</button></div>';
@@ -2950,7 +2950,7 @@ aiAdd('assistant','Hi! I\'m Claude. Ask me anything.');
   window.tvApprove=()=>tvAsk($('tvIn').value);
   socket.on('auth_ok',()=>{ const c=sessionStorage.getItem('tvCode'); if(c){ sessionStorage.removeItem('tvCode'); setTimeout(()=>{ if(confirm('Sign in your TV (code '+c+') as '+me+'?')) tvAsk(c); },1200); } });
   socket.on('tv_result',r=>toast(r.ok?'📺 TV signed in ✅':'⚠️ '+(r.err||'Failed')));
-  const ab=document.querySelector('#authModal .modal-body'); if(ab&&!TVM&&wide){ const b=document.createElement('button'); b.className='btn gray sm'; b.style.marginTop='10px'; b.textContent='📺 I am on a TV'; b.onclick=()=>tvOn(); ab.append(b); }
+  const ab=document.querySelector('#authModal .modal-body'); if(ab&&!TVM){ const b=document.createElement('button'); b.className='btn blue sm'; b.style.cssText='display:block;flex:none;align-self:flex-start;height:auto;margin:10px 14px 0'; b.textContent='📺 I\'m on a TV'; b.onclick=()=>tvOn(); const hd=document.querySelector('#authModal .modal-header'); (hd?hd.after(b):ab.parentNode.insertBefore(b,ab)); }
   /* TV remote: arrows move focus, Enter clicks, Back closes the top window */
   if(TVM){ document.body.classList.add('tv');
     setInterval(()=>document.querySelectorAll('.tile-app,.nav,.btn,.lchip,.close-btn').forEach(e=>{ if(!e.hasAttribute('tabindex')) e.tabIndex=0; }),1000);
