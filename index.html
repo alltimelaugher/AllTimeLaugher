@@ -828,6 +828,7 @@ function refreshLists(){ renderUsers(); buildChatSelect(); renderCallPicker(); f
 // values from a tapped notification that opened the app
 const _L = new URLSearchParams(location.search);
 const L_ANS=_L.get('answer'), L_VID=_L.get('video')==='1', L_FROM=_L.get('from'), L_CHAT=_L.get('chat');
+const L_TV=_L.get('tv'); if(L_TV){ try{ sessionStorage.setItem('tvCode',L_TV); }catch(e){} }
 if(location.search) history.replaceState(null,'',location.pathname);
 
 // ================= accounts =================
@@ -2397,7 +2398,7 @@ socket.on('push_info',i=>{
 });
 // alerts while the app is in the background (no server keys needed)
 socket.on('receive_message',d=>{ if(document.hidden && d.user!==me && d.to) localNotify(d.user,{body:d.text||'📷 Photo / 🎙️ Voice note',tag:'msg-'+d.user,renotify:true,vibrate:[120],data:{type:'msg',from:d.user}}); });
-socket.on('call_invite',d=>{ if(document.hidden) localNotify('📞 '+d.from,{body:(d.video?'Video':'Voice')+' call — incoming',tag:'call-'+d.room,renotify:true,requireInteraction:true,vibrate:[400,200,400,200,400],data:{type:'call',room:d.room,from:d.from,video:d.video},actions:[{action:'answer',title:'✅ Pick up'},{action:'dismiss',title:'❌ Dismiss'}]}); });
+socket.on('call_invite',d=>{ if(document.hidden) localNotify(d.from,{body:d.video?'📹 Incoming video call':'📞 Incoming voice call',tag:'call-'+d.room,renotify:true,requireInteraction:true,vibrate:[400,200,400,200,400],data:{type:'call',room:d.room,from:d.from,video:d.video},actions:[{action:'answer',title:'✅ Accept'},{action:'decline',title:'❌ Decline'}],silent:false,icon:'/icon-192.png',badge:'/icon-192.png',timestamp:Date.now()}); });
 let pushDone=false;
 socket.on('init',()=>{ showNotifState(); if(!pushDone && window.Notification && Notification.permission==='granted' && localStorage.getItem('push')!=='0'){ pushDone=true; enablePush(false); } });
 
@@ -2911,6 +2912,59 @@ const _omL=openModal; openModal=function(id){ _omL(id); if(id==='ludApp'&&!LUD&&
   socket.on('init',()=>{ if(window.Notification&&Notification.permission==='default'&&!sessionStorage.getItem('ntAsk')){ sessionStorage.setItem('ntAsk','1'); setTimeout(()=>inAppNotify('🔔 Turn on notifications','Tap here to allow alerts for messages and calls',()=>enablePush(true),9000),1500); } });
 })();
 
+/* ===== Claude AI chat app ===== */
+const aiBody=el('div',{});
+aiBody.innerHTML='<div id="aiLog" style="height:55vh;overflow:auto;padding:6px"></div><div style="display:flex;gap:6px;margin-top:8px"><input id="aiIn" placeholder="Ask Claude anything…" style="flex:1"><button class="btn green" id="aiSend">Send</button></div><div style="margin-top:6px"><button class="btn gray sm" id="aiClr">🗑 Clear chat</button></div><small style="color:#888">The server owner must set ANTHROPIC_API_KEY (or GROQ_API_KEY) for answers.</small>';
+mkApp('aiApp','Claude AI','✨','Claude AI',aiBody);
+const AIH=[]; let aiBusy=0, aiTyp=null;
+function aiAdd(role,text){ const d=document.createElement('div'); d.style.cssText='margin:6px 0;padding:8px 12px;border-radius:12px;max-width:88%;white-space:pre-wrap;'+(role==='user'?'background:#5c1818;margin-left:auto':'background:#2a0b0b;border:1px solid #4a1a1a'); d.textContent=text; $('aiLog').append(d); $('aiLog').scrollTop=1e9; return d; }
+function aiSend(){ const i=$('aiIn'),t=i.value.trim(); if(!t||aiBusy) return; i.value=''; AIH.push({role:'user',content:t}); aiAdd('user',t); aiTyp=aiAdd('assistant','…'); aiBusy=1; socket.emit('ai_chat',{msgs:AIH}); }
+$('aiSend').addEventListener('click',aiSend); $('aiIn').addEventListener('keydown',e=>{ if(e.key==='Enter') aiSend(); });
+$('aiClr').addEventListener('click',()=>{ AIH.length=0; $('aiLog').innerHTML=''; aiAdd('assistant','Hi! I\'m Claude. Ask me anything.'); });
+socket.on('ai_reply',r=>{ aiBusy=0; if(aiTyp) aiTyp.remove(); if(r.text){ AIH.push({role:'assistant',content:r.text}); aiAdd('assistant',r.text); } else aiAdd('assistant','⚠️ '+(r.err||'No answer')); });
+aiAdd('assistant','Hi! I\'m Claude. Ask me anything.');
+
+/* ===== TV mode + QR / code sign-in ===== */
+(function(){
+  const ua=/SMART-TV|SmartTV|Tizen|Web0S|WebOS|AndroidTV|Android TV|BRAVIA|HbbTV|Roku|AFTM|CrKey/i.test(navigator.userAgent);
+  if(_L.get('tvmode')==='1') localStorage.setItem('tvmode','1');
+  const TVM=localStorage.getItem('tvmode')==='0'?false:(localStorage.getItem('tvmode')==='1'||ua);
+  window.tvOn=()=>{ localStorage.setItem('tvmode','1'); location.reload(); }; window.tvOff=()=>{ localStorage.setItem('tvmode','0'); location.reload(); };
+  const css=document.createElement('style'); css.textContent='body.tv{zoom:1.3}body.tv :focus{outline:4px solid #ff9100!important;outline-offset:2px}#tvLogin{position:fixed;inset:0;z-index:10000;background:#0c0202;color:#fff;display:none;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap;padding:24px}#tvLogin .box{background:#fff;padding:14px;border-radius:14px;width:244px;height:244px;display:flex;align-items:center;justify-content:center;margin:auto}#tvCode{font-size:44px;letter-spacing:8px;font-weight:700;text-align:center;margin-top:14px;color:#ffb300}';
+  document.head.append(css);
+  const ov=document.createElement('div'); ov.id='tvLogin';
+  ov.innerHTML='<div style="text-align:center"><div class="box" id="tvQr">QR…</div><div id="tvCode">······</div><div style="color:#aaa;margin-top:6px">Code is valid for 10 minutes</div></div><div style="max-width:480px"><h1 style="margin:0 0 14px;color:#ff8a80">📺 Gemini OS on TV</h1><ol style="font-size:20px;line-height:1.7;padding-left:22px"><li>Scan the QR code with your phone camera.<br><small style="color:#aaa">Or open <b id="tvUrl"></b> on your phone → Settings → <i>TV</i> and type the code.</small></li><li>On your phone choose <b>Google</b>, <b>Login</b> or <b>Sign up</b>.</li><li>Tap <b>Approve</b> – this TV signs in by itself.</li></ol><button class="btn" id="tvHere" style="font-size:20px;padding:14px 24px;margin-top:8px">⌨ Log in on this TV instead</button></div>';
+  document.body.append(ov);
+  const loadQR=(ok,fail)=>{ if(window.QRCode) return ok(); const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=ok; s.onerror=fail; document.head.append(s); };
+  const want=()=>TVM&&!localStorage.getItem('token'), ask=()=>{ if(want()) socket.emit('tv_new'); };
+  socket.on('connect',ask); if(socket.connected) ask();
+  socket.on('tv_code',({code})=>{ if(!want()) return; ov.style.display='flex'; $('tvCode').textContent=code.slice(0,3)+' '+code.slice(3); $('tvUrl').textContent=location.host;
+    const q=$('tvQr'); q.innerHTML=''; loadQR(()=>{ try{ new QRCode(q,{text:location.origin+'/?tv='+code,width:216,height:216,correctLevel:QRCode.CorrectLevel.M}); }catch(e){ q.innerHTML='<small style="color:#000">Open '+location.host+'</small>'; } },()=>{ q.innerHTML='<small style="color:#000;text-align:center">QR could not load.<br>Open<br><b>'+location.host+'</b><br>on your phone</small>'; });
+    clearTimeout(window._tvT); window._tvT=setTimeout(ask,9*60000); });
+  socket.on('tv_token',({token,name})=>{ localStorage.setItem('token',token); localStorage.setItem('saved_name',name); location.reload(); });
+  $('tvHere').addEventListener('click',()=>{ ov.style.display='none'; });
+  /* phone side: approve a TV (from the scanned link or by typing the code) */
+  const tvAsk=code=>{ const c=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(c.length!==6) return toast('Enter the 6-letter code shown on the TV'); socket.emit('tv_approve',{code:c}); };
+  window.tvApprove=()=>tvAsk($('tvIn').value);
+  socket.on('auth_ok',()=>{ const c=sessionStorage.getItem('tvCode'); if(c){ sessionStorage.removeItem('tvCode'); setTimeout(()=>{ if(confirm('Sign in your TV (code '+c+') as '+me+'?')) tvAsk(c); },1200); } });
+  socket.on('tv_result',r=>toast(r.ok?'📺 TV signed in ✅':'⚠️ '+(r.err||'Failed')));
+  const ab=document.querySelector('#authModal .modal-body'); if(ab&&!TVM){ const b=document.createElement('button'); b.className='btn gray sm'; b.style.marginTop='10px'; b.textContent='📺 I am on a TV'; b.onclick=()=>tvOn(); ab.append(b); }
+  /* TV remote: arrows move focus, Enter clicks, Back closes the top window */
+  if(TVM){ document.body.classList.add('tv');
+    setInterval(()=>document.querySelectorAll('.tile-app,.nav,.btn,.lchip,.close-btn').forEach(e=>{ if(!e.hasAttribute('tabindex')) e.tabIndex=0; }),1000);
+    document.addEventListener('keydown',e=>{ const k=e.key, a=document.activeElement;
+      if(k==='Enter'){ if(a&&a!==document.body&&!['INPUT','BUTTON','TEXTAREA','SELECT'].includes(a.tagName)&&a.click){ a.click(); e.preventDefault(); } return; }
+      const tops=[...document.querySelectorAll('.modal')].filter(m=>m.style.display==='flex'), top=tops[tops.length-1];
+      if(k==='Escape'||k==='GoBack'||e.keyCode===10009||e.keyCode===461){ if(ov.style.display==='flex') return; if(top){ closeModal(top.id); e.preventDefault(); } return; }
+      const dir={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[k]; if(!dir) return;
+      if(a&&['INPUT','TEXTAREA','SELECT'].includes(a.tagName)&&dir[0]) return;
+      const scope=ov.style.display==='flex'?ov:top, els=[...document.querySelectorAll('[tabindex="0"],button,input,select')].filter(x=>x.offsetParent&&!x.disabled&&(!scope||scope.contains(x)));
+      const from=(a&&a!==document.body&&els.includes(a))?a:els[0]; if(!from) return; if(from!==a){ from.focus(); e.preventDefault(); return; }
+      const fr=from.getBoundingClientRect(), fx=fr.left+fr.width/2, fy=fr.top+fr.height/2; let best=null,bs=1e9;
+      els.forEach(x=>{ if(x===from) return; const r=x.getBoundingClientRect(), dx=r.left+r.width/2-fx, dy=r.top+r.height/2-fy, along=dx*dir[0]+dy*dir[1]; if(along<=4) return; const sc=along+Math.abs(dir[0]?dy:dx)*2.5; if(sc<bs){ bs=sc; best=x; } });
+      if(best){ best.focus(); best.scrollIntoView({block:'nearest',inline:'nearest'}); e.preventDefault(); } }); }
+})();
+
 /* ===== Phone number in profile + dial pad (Calls app) ===== */
 window.MYDIAL='';
 (function(){
@@ -2985,6 +3039,9 @@ function pzUI(){
    +'<div class="user-card"><div>Transparency</div><input type="range" id="pzNa" min="0" max="100" value="'+pzg('ntA')+'"></div>'
    +'<div class="user-card"><div>Text colour</div><input type="color" id="pzNt" value="'+pzg('ntTx')+'" style="width:70px;height:34px"></div>'
    +'<button class="btn gray" style="width:100%;margin-top:6px" onclick="toast(\'🔔 Sample notification\')">Preview notification</button>'
+   +'<button class="btn" style="width:100%;margin-top:6px" onclick="pzTestCall()">📞 Preview call notification (Accept / Decline)</button>'
+   +'<button class="btn gray" style="width:100%;margin-top:6px" onclick="pzNotifHelp()">❓ Make alerts pop up on screen (help)</button>'
+   +'<h4>📺 TV</h4><div style="font-size:12px;color:#aaa;margin-bottom:6px">Type the code shown on your TV to sign it in as you.</div><div style="display:flex;gap:6px"><input id="tvIn" maxlength="7" placeholder="Code on TV" style="flex:1;text-transform:uppercase"><button class="btn green sm" onclick="tvApprove()">Approve</button></div><button class="btn gray" style="width:100%;margin-top:6px" onclick="tvOn()">📺 Use this device as a TV</button><button class="btn gray" style="width:100%;margin-top:6px" onclick="tvOff()">📱 Back to normal mode</button>'
    +'<h4>🎨 Icons</h4><div class="user-card"><div>Icon box colour</div><input type="color" id="pzIc" value="'+(TSX.col||'#2a0b0b')+'" style="width:70px;height:34px"></div>'
    +'<button class="btn" style="width:100%;margin-top:8px" onclick="tsToggle()">✂️ Transparent icons on / off</button>'
    +'<button class="btn gray" style="width:100%;margin-top:8px" onclick="pzReset()">Reset all</button>';
@@ -2995,6 +3052,8 @@ function pzUI(){
   d.querySelector('#pzTo').addEventListener('change',e=>{ PZ.topOnly=e.target.checked?1:0; pzApply(1); });
   d.querySelector('#pzIc').addEventListener('input',e=>tsColor(e.target.value));
 }
+window.pzTestCall=async()=>{ if(!window.Notification||Notification.permission!=='granted'){ await enablePush(true); } localNotify('Test caller',{body:'📞 Incoming voice call',tag:'call-test',renotify:true,requireInteraction:true,silent:false,vibrate:[500,250,500,250,500],icon:'/icon-192.png',badge:'/icon-192.png',data:{type:'test'},actions:[{action:'answer',title:'✅ Accept'},{action:'decline',title:'❌ Decline'}]}); toast('Now press Home or lock the phone to see how it looks'); };
+window.pzNotifHelp=()=>alert('To get pop-up alerts like WhatsApp (not just a beep):\n\n1. Phone Settings → Apps → Chrome (or this installed app) → Notifications.\n2. Open the site/channel for this app and set it to "Urgent" / "Pop on screen" / "Show floating notifications".\n3. Turn off Battery saver and Do Not Disturb for it.\n4. Install the site as an app (Chrome menu → Install app).\n\nThen tap "Preview call notification" and press Home to test.');
 window.pzReset=()=>{ Object.keys(PZ).forEach(k=>delete PZ[k]); try{ localStorage.removeItem('pz'); }catch(e){} tsReset(); pzApply(0); const o=document.querySelector('#settingsModal .modal-body h4').previousElementSibling; };
 const _omP=openModal; openModal=function(id){ if(id==='settingsModal'){ const L=[...document.querySelectorAll('#side .nav')].map(n=>(n.querySelector('span')||{}).textContent).filter(Boolean), dk=pzg('dock'); document.querySelectorAll('.pzDk').forEach((sel,i)=>{ sel.innerHTML='<option value="">— none —</option>'+L.map(l=>'<option'+(l===dk[i]?' selected':'')+'>'+l+'</option>').join(''); }); } _omP(id); };
 pzUI(); setTimeout(()=>pzApply(0),300); setTimeout(()=>pzApply(0),1500);
@@ -3048,10 +3107,10 @@ const _omG3=openModal; openModal=function(id){ _omG3(id); if(id==='mmApp'&&!MM) 
 const mgCss=document.createElement('style'); mgCss.textContent='.mm{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:360px;margin:10px auto}.mmc{aspect-ratio:1;border-radius:12px;background:#5c1818;border:2px solid #7a2a2a;font-size:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:transparent;user-select:none}.mmc.up{background:#fff8e1;color:#000}.mmc.ok{background:#2e7d32;color:#fff;border-color:#66bb6a}.c4{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:360px;margin:10px auto;background:#1e5fd6;padding:8px;border-radius:12px}.c4 b{aspect-ratio:1;border-radius:50%;background:#0b1f4d;cursor:pointer}.c4 b.r{background:#e53935}.c4 b.y{background:#fdd835}'; document.head.append(mgCss);
 /* ===== all game apps live in the Games section only ===== */
 setTimeout(()=>{
-  const body=document.querySelector('#gamesModal .modal-body'); if(!body||document.getElementById('gamesMore')) return;
-  const d=document.createElement('div'); d.id='gamesMore'; d.innerHTML='<h4>🎮 More games</h4><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px"></div>';
-  GAMELIST.forEach(g=>{ const b=document.createElement('button'); b.className='btn'; b.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;background:#2a0b0b;border:1px solid #4a1a1a'; b.innerHTML='<span style="font-size:28px">'+g.icon+'</span><span style="font-size:11px">'+g.label+'</span>'; b.onclick=()=>openModal(g.id); d.lastChild.append(b); });
-  body.insertBefore(d,body.firstChild);
+  const tabs=document.querySelector('#gamesModal .gtabs'); if(!tabs||document.getElementById('gamesMore')) return;
+  const lb=[...tabs.children].find(x=>/openBoard/.test(x.getAttribute('onclick')||''));
+  GAMELIST.filter(g=>g.id!=='flApp').forEach(g=>{ const x=document.createElement('button'); x.className='btn gray'; x.textContent=g.icon+' '+g.label; x.onclick=()=>openModal(g.id); tabs.insertBefore(x,lb||null); });
+  const mk=document.createElement('span'); mk.id='gamesMore'; mk.style.display='none'; tabs.append(mk);
   ['gamesModal',...GAMEIDS].forEach(id=>{ const h=document.querySelector('#'+id+' .modal-header'), cb=h&&h.querySelector('.close-btn'); if(h&&cb){ const b=document.createElement('button'); b.className='close-btn'; b.style.background='#37474f'; b.textContent='⛶'; b.title='Full screen / landscape'; b.onclick=()=>gFull(id); const w=document.createElement('div'); w.style.cssText='display:flex;gap:6px'; cb.replaceWith(w); w.append(b,cb); } });
 },0);
 const _cmG=closeModal; closeModal=function(id){ _cmG(id); if(GAMEIDS.includes(id)&&!window._noRet) openGames(); };
