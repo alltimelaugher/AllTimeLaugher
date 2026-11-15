@@ -831,6 +831,7 @@ const L_ANS=_L.get('answer'), L_VID=_L.get('video')==='1', L_FROM=_L.get('from')
 if(location.search) history.replaceState(null,'',location.pathname);
 
 // ================= accounts =================
+function adminShow(on){ const b=$('adminBtn'); if(b) b.style.display=on?'block':'none'; document.querySelectorAll('#adminTile,.tile-app').forEach(t=>{ if(t.id==='adminTile'||/^🛡/.test(t.textContent.trim())) t.style.display=on?'block':'none'; }); }
 function showName(){ $('display-username').innerText = me ? '👤 '+me+' · Log out' : ''; $('heroName').innerText = me; }
 function showAuth(msg){ $('authModal').style.display='flex'; if(msg) $('authMsg').innerText=msg; }
 function setAuthMode(m,msg){
@@ -863,8 +864,8 @@ socket.on('auth_ok',({name,token,admin,owner})=>{
   me=name; localStorage.setItem('token',token); localStorage.setItem('saved_name',name);
   if(pendingCred && window.PasswordCredential){ try{ navigator.credentials.store(new PasswordCredential({id:pendingCred.name,password:pendingCred.password,name})); }catch(e){} }
   pendingCred=null;
-  $('adminBtn').style.display = admin ? 'block' : 'none'; $('adminTile').style.display = admin ? 'block' : 'none';
-  $('authModal').style.display='none'; $('authPass').value=''; $('authPass2').value=''; showName();
+  $('authModal').style.display='none'; $('authPass').value=''; $('authPass2').value='';
+  try{ adminShow(!!admin); showName(); }catch(e){ console.error(e); }
 });
 socket.on('auth_fail',()=>{ ['token','saved_name','chat_cache'].forEach(k=>localStorage.removeItem(k)); me=''; showName(); setAuthMode('login','Please log in again'); showAuth(); });
 socket.on('auth_error',m=>{ pendingCred=null; $('authMsg').innerText=m; });
@@ -880,7 +881,7 @@ async function logout(){
   socket.emit('logout',{token:localStorage.getItem('token'),endpoint:ep});
   ['token','saved_name','chat_cache','outbox'].forEach(k=>localStorage.removeItem(k));
   outbox=[]; me=''; globalMsgs=[]; dms={}; friends=[]; requests=[]; blocks=[]; directory=[]; dirMap={}; unread={}; cur='global'; profileLoaded=false; SHOP.fx=0;
-  $('adminBtn').style.display='none'; $('adminTile').style.display='none';
+  adminShow(false);
   goHome(); showName(); refreshLists(); renderChat(); setAuthMode('signup'); showAuth();
 }
 fetch((SERVER_URL||'')+'/config').then(r=>r.json()).then(c=>{
@@ -902,6 +903,9 @@ function phReset(){ phNumber=''; $('phStep2').style.display='none'; $('phStep1')
 socket.on('phone_sent',({phone})=>{ phNumber=phone; $('phStep1').style.display='none'; $('phStep2').style.display='block'; $('authMsg').innerText='Code sent to '+phone; $('phCode').focus(); });
 socket.on('phone_need_name',({error})=>{ const n=prompt((error?error+'\n':'')+'Phone verified! Choose your display name (spaces allowed):',''); if(n&&n.trim()) socket.emit('phone_name',{phone:phNumber,name:n.trim()}); else phReset(); });
 socket.on('auth_ok',()=>phReset());
+socket.on('init',()=>{ window._initSeen=1; try{ sessionStorage.removeItem('rl'); }catch(e){} });
+socket.on('auth_ok',()=>{ window._initSeen=0; setTimeout(()=>{ let tried=0; try{ tried=sessionStorage.getItem('rl'); }catch(e){}
+  if(!tried&&localStorage.getItem('token')&&($('authModal').style.display==='flex'||!window._initSeen)){ try{ sessionStorage.setItem('rl','1'); }catch(e){} location.reload(); } },2500); });
 socket.on('google_need_name',({suggested,error})=>{
   const n=prompt((error?error+'\n':'')+'Choose your display name (spaces allowed):',suggested||'');
   if(n&&n.trim()) socket.emit('google_auth',{credential:pendingGoogle,name:n.trim(),clientId});
@@ -1140,7 +1144,8 @@ function recModeSet(m){ if(REC) return toast('Stop the current recording first')
   $('recStopBtn').innerHTML=m==='live'?'⏹ Stop live':'⏹ Stop &amp; save'; }
 async function recStart(){
   if(REC) return toast('Already recording');
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia) return toast('📱 Screen recording is not supported on phone browsers. Use a laptop.');
+  if(!navigator.mediaDevices) return toast('Recording is not supported in this browser.');
+  const hasScr=!!navigator.mediaDevices.getDisplayMedia; if(!hasScr) toast('📱 Phone browsers cannot capture the screen, so your camera is used instead.');
   // 1) audio engine created + resumed right at the click (browsers keep it silent otherwise = "mic not working")
   const AC=window.AudioContext||window.webkitAudioContext, ctx=new AC();
   try{ await ctx.resume(); }catch(e){}
@@ -1152,11 +1157,11 @@ async function recStart(){
   }
   // 3) then the screen
   let screen;
-  try{ screen=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:$('recSys').checked}); }
+  try{ screen=hasScr?await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:$('recSys').checked}):await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false}); }
   catch(e){ if(mic) mic.getTracks().forEach(t=>t.stop()); ctx.close(); return toast('Recording cancelled'); }
   const dest=ctx.createMediaStreamDestination(), parts=[];
   if(screen.getAudioTracks().length){ ctx.createMediaStreamSource(new MediaStream(screen.getAudioTracks())).connect(dest); parts.push('device sound'); }
-  else if($('recSys').checked) toast('No device sound captured: tick "Also share tab/system audio" in the share window.');
+  else if($('recSys').checked&&hasScr) toast('No device sound captured: tick "Also share tab/system audio" in the share window.');
   if(mic&&mic.getAudioTracks().length){ const g=ctx.createGain(); g.gain.value=1.5; ctx.createMediaStreamSource(mic).connect(g); g.connect(dest); parts.push('microphone'); }
   const out=new MediaStream([...screen.getVideoTracks(),...(parts.length?dest.stream.getAudioTracks():[])]);
   if(recMode==='live'){ // LIVE: nothing is recorded or saved, no time limit
@@ -1304,7 +1309,7 @@ function admSetOwner(e,on){ const name=decodeURIComponent(e); if(confirm((on?'Ma
 function admSetAdmin(e,on){ socket.emit('set_admin',{name:decodeURIComponent(e),on}); }
 function admAddWord(){ const w=$('admWord').value.trim(); if(w){ socket.emit('admin_word',{word:w}); $('admWord').value=''; } }
 function admDelWord(e){ socket.emit('admin_word',{word:decodeURIComponent(e),del:true}); }
-socket.on('role_update',r=>{ myRole=r.admin?'admin':''; $('adminBtn').style.display=r.admin?'block':'none'; $('adminTile').style.display=r.admin?'block':'none'; });
+socket.on('role_update',r=>{ myRole=r.admin?'admin':''; adminShow(!!r.admin); });
 socket.on('banned',b=>{
   $('banReason').innerText='Reason: '+(b.reason||'No reason given');
   $('banUntil').innerText=b.until?'Ban ends at '+new Date(b.until).toLocaleTimeString():'This ban is permanent';
@@ -1464,9 +1469,16 @@ async function flipCam(){
   }catch(e){ toast('Camera flip failed'); }
 }
 async function shareScreen(){
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return toast('📱 Phone browsers and apps cannot share the screen from a web page. Use a laptop for screen sharing.');
+  if(!navigator.mediaDevices) return toast('Sharing is not supported in this browser.');
+  const hasScr=!!navigator.mediaDevices.getDisplayMedia;
   if(sharing) return stopShare();
-  let s; try{ s=await navigator.mediaDevices.getDisplayMedia({video:true}); }catch(e){ return toast('Screen share cancelled'); }
+  let s;
+  if(hasScr){ try{ s=await navigator.mediaDevices.getDisplayMedia({video:true}); }catch(e){ return toast('Screen share cancelled'); } }
+  else{
+    const cv=[...document.querySelectorAll('.modal canvas')].find(c=>c.closest('.modal').style.display==='flex'&&c.offsetParent&&c.captureStream);
+    if(cv){ s=cv.captureStream(30); toast('📱 Phones cannot share the whole screen, so your open game is shared. Tap again to stop.'); }
+    else{ try{ s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); toast('📱 Phones cannot share the screen, so your back camera is shared. Tap again to stop.'); }catch(e){ return toast('Could not open the camera: '+e.message); } }
+  }
   const track=s.getVideoTracks()[0]; sharing={track,stream:s};
   Object.values(peers).forEach(p=>{ const snd=p.pc.getSenders().find(x=>x.track&&x.track.kind==='video'); if(snd) snd.replaceTrack(track); else p.pc.addTrack(track,s); });
   track.onended=stopShare; setLocalTile(); refreshCtrls();
@@ -2435,6 +2447,7 @@ function openProfile(e){
     +'<div>'+(on?'🟢 online':'⚪ last seen '+timeAgo(p.lastSeen))+'</div>'
     +(p.status?'<div style="color:#aaa;margin-top:4px">'+esc(p.status)+'</div>':'')
     +(p.bio?'<p style="margin:10px 0">'+esc(p.bio)+'</p>':'')+'</div>'
+    +(n===me?'<div style="text-align:center;margin:6px 0">📱 <b>'+esc(window.MYDIAL||'no number set')+'</b> <button class="btn sm" onclick="closeModal(\'profileModal\');openModal(\'phoneApp\')">Set / change</button></div>':'')
     +'<div class="pstats"><div class="stat"><b>🪙 '+(p.coins||0)+'</b><small>Coins</small></div><div class="stat"><b>🏆 '+(p.wins||0)+'</b><small>Wins</small></div><div class="stat"><b>#'+rank+'</b><small>Rank</small></div></div>'
     +'<h4>Achievements</h4><div>'+ach+'</div>'
     +'<p style="color:#888;font-size:12px">👁 '+(p.visits||0)+' visits</p>'
@@ -2530,9 +2543,11 @@ function mkApp(id,title,icon,label,body){
   const m=el('div',{id,class:'modal'});
   m.append(el('div',{class:'modal-header'},el('h3',{},title),el('button',{class:'close-btn',onclick:()=>closeModal(id)},'X')));
   const b=el('div',{class:'modal-body'}); b.append(body); m.append(b); document.body.append(m);
+  if(GAMEIDS.includes(id)){ GAMELIST.push({id,icon,label,title}); return; }
   $('side').append(el('button',{class:'nav more',onclick:()=>openModal(id)},icon,el('span',{},label)));
   const tiles=document.querySelector('.tiles'); tiles.insertBefore(el('div',{class:'tile-app',onclick:()=>openModal(id)},el('i',{},icon),label),tiles.lastElementChild);
 }
+const GAMEIDS=['ludApp','snakeApp','g48App','c4App','flApp','mmApp','slApp','rcApp','mzApp','dbApp','quizApp'], GAMELIST=[];
 
 /* ---------- 1) (multitasking removed) apps open one at a time, full screen, like the original ---------- */
 const _openModal=openModal;
@@ -2830,7 +2845,7 @@ function ludDo(c){
   setTimeout(()=>{ if(LUD!==L||L.over) return;
     if(L.sixes>=3||!lg.length){ L.msg=L.names[c]+' rolled '+L.d+(L.sixes>=3?' (three 6s: turn lost)':': no move'); return ludEnd(c,0); }
     if(L.types[c]==='ai') return ludPick(lAI(L.T,c,L.d));
-    if(lg.length===1) return ludPick(lg[0]);
+    if(lg.length===1||lg.every(k=>L.T[c][k]<0)) return ludPick(lg[0]);
     L.msg=(c===LMYSEAT?'You':L.names[c])+' rolled '+L.d+'. Tap a glowing token.'; ludPush(); },700);
 }
 function ludPick(k){
@@ -2881,9 +2896,54 @@ socket.on('ludo_msg',({from,data})=>{
 });
 const _omL=openModal; openModal=function(id){ _omL(id); if(id==='ludApp'&&!LUD&&!LROOM) ludSetup(); };
 
+/* ===== In-app notification pop-up (sound + vibration) + permission prompt ===== */
+(function(){
+  const st=document.createElement('style'); st.textContent='#ntBan{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:8px;right:8px;z-index:9998;display:none;padding:12px 14px;border-radius:14px;background:#5c1818;color:#fff;box-shadow:0 8px 24px #000a;font-size:14px;cursor:pointer;border:1px solid #ff9100}';
+  document.head.append(st);
+  const ban=document.createElement('div'); ban.id='ntBan'; document.body.append(ban);
+  let ctx; const beep=()=>{ try{ ctx=ctx||new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=880; g.gain.setValueAtTime(.15,ctx.currentTime); g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.35); o.start(); o.stop(ctx.currentTime+.35); }catch(e){} };
+  window.inAppNotify=(title,body,fn,ms)=>{ ban.innerHTML='<b>'+esc(title)+'</b><br>'+esc(body); ban.onclick=()=>{ ban.style.display='none'; if(fn) fn(); }; ban.style.display='block'; beep(); try{ navigator.vibrate&&navigator.vibrate([150,80,150]); }catch(e){}; clearTimeout(ban._t); ban._t=setTimeout(()=>ban.style.display='none',ms||5000); };
+  const baseTitle=document.title; document.addEventListener('visibilitychange',()=>{ if(!document.hidden) document.title=baseTitle; });
+  socket.on('receive_message',d=>{ if(d.user===me||!d.to) return;
+    if(document.hidden){ document.title='💬 New message from '+d.user; return; }
+    const open=$('chatApp').style.display==='flex'&&cur===d.user;
+    if(!open) inAppNotify('💬 '+d.user,d.text||'📷 Photo / 🎙️ Voice note',()=>{ openModal('chatApp'); switchChat(d.user); }); });
+  socket.on('init',()=>{ if(window.Notification&&Notification.permission==='default'&&!sessionStorage.getItem('ntAsk')){ sessionStorage.setItem('ntAsk','1'); setTimeout(()=>inAppNotify('🔔 Turn on notifications','Tap here to allow alerts for messages and calls',()=>enablePush(true),9000),1500); } });
+})();
+
+/* ===== Phone number in profile + dial pad (Calls app) ===== */
+window.MYDIAL='';
+(function(){
+  const body=document.querySelector('#phoneApp .modal-body'); if(!body) return;
+  const d=document.createElement('div'); d.id='dialBox';
+  const keys=['1','2','3','4','5','6','7','8','9','*','0','#'];
+  d.innerHTML='<div class="user-card"><span>📱 My number: <b id="myDial">not set</b></span></div>'
+   +'<div style="display:flex;gap:6px;margin-bottom:12px"><input id="dialMine" type="tel" inputmode="tel" maxlength="16" placeholder="Set my number (5–15 digits)" style="flex:1"><button class="btn sm green" id="dialSave">Save</button></div>'
+   +'<h4 style="margin:6px 0">🔢 Dial pad</h4>'
+   +'<input id="dialNum" type="tel" inputmode="tel" maxlength="16" placeholder="Enter number" style="width:100%;text-align:center;font-size:24px;letter-spacing:2px;margin-bottom:8px">'
+   +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:300px;margin:0 auto 10px">'+keys.map(k=>'<button class="btn dk" data-k="'+k+'" style="font-size:22px;padding:14px 0;background:#2a0b0b">'+k+'</button>').join('')+'</div>'
+   +'<div style="display:flex;gap:8px;max-width:300px;margin:0 auto 14px"><button class="btn gray" id="dialDel" style="flex:1">⌫</button><button class="btn blue" id="dialVoice" style="flex:2">📞 Call</button><button class="btn green" id="dialVideo" style="flex:2">📹 Video</button></div>'
+   +'<hr style="border-color:#4a1a1a"><h4 style="margin:6px 0">👥 Or call by name</h4>';
+  body.insertBefore(d,body.firstChild);
+  const num=document.getElementById('dialNum');
+  d.querySelectorAll('.dk').forEach(b=>b.addEventListener('click',()=>{ if(num.value.length<16) num.value+=b.dataset.k; }));
+  document.getElementById('dialDel').addEventListener('click',()=>{ num.value=num.value.slice(0,-1); });
+  document.getElementById('dialSave').addEventListener('click',()=>{ socket.emit('set_dial',{num:document.getElementById('dialMine').value}); });
+  const go=v=>{ const n=num.value.replace(/\D/g,''); if(n.length<5) return toast('Enter a full number'); window._dialVideo=v; socket.emit('dial_lookup',{num:n}); };
+  document.getElementById('dialVoice').addEventListener('click',()=>go(false));
+  document.getElementById('dialVideo').addEventListener('click',()=>go(true));
+  socket.on('dial_result',r=>{ if(window._dialVideo===undefined) return; const v=window._dialVideo; window._dialVideo=undefined;
+    if(!r.name) return toast('No user has that number');
+    if(r.name.toLowerCase()===me.toLowerCase()) return toast("That's your own number");
+    if(!r.online) return toast(r.name+' is offline right now');
+    callSel=new Set([r.name]); document.getElementById('targetUser').value=''; startCall(v); });
+  socket.on('dial_me',({num:n})=>{ window.MYDIAL=n||''; document.getElementById('myDial').textContent=n||'not set'; document.getElementById('dialMine').value=n||''; });
+  const ask=()=>socket.emit('get_dial'); socket.on('init',ask); if(socket.connected) ask();
+})();
+
 /* ===== Personalize (Settings): dock, widget, icons ===== */
 const PZ=(()=>{ try{ return JSON.parse(localStorage.getItem('pz'))||{}; }catch(e){ return {}; } })();
-const PZD={dock:['Messages','Calls','Friends','Games'],dockCol:'#1c0606',dockA:86,wgCol:'#b71c1c',wgA:100,wgTx:'#ffffff',wgNote:'Hello 👋'};
+const PZD={dock:['Messages','Calls','Friends','Games'],dockCol:'#1c0606',dockA:86,wgCol:'#b71c1c',wgA:100,wgTx:'#ffffff',wgNote:'Hello 👋',topCol:'#230a0a',topA:100,topTx:'#e5b3b3',topOnly:0,ntCol:'#5c1818',ntA:100,ntTx:'#ffffff',sbCol:'#0c0202',sideCol:'#1c0606',sideA:100};
 const pzg=k=>PZ[k]!==undefined?PZ[k]:PZD[k];
 const pzHex=(h,a)=>{ const n=parseInt(h.slice(1),16); return 'rgba('+(n>>16)+','+(n>>8&255)+','+(n&255)+','+a/100+')'; };
 const pzCss=document.createElement('style'); pzCss.id='pzCss'; document.head.append(pzCss);
@@ -2894,13 +2954,15 @@ function pzApply(save){
   const wa=pzg('wgA');
   pzCss.textContent='@media (max-width:899px){#side .nav{display:none!important}#side .nav.dk{display:flex!important}#side{background:'+pzHex(pzg('dockCol'),pzg('dockA'))+'!important;'+(pzg('dockA')<5?'border-color:transparent!important;box-shadow:none!important;':'')+'}}'
    +'.wg{background:'+pzHex(pzg('wgCol'),wa)+'!important;'+(wa<5?'border-color:transparent!important;box-shadow:none!important;':'')+'}.wg-time,.wg-date,.wg-hi,.wg-note{color:'+pzg('wgTx')+'!important}.wg-note{margin-top:6px;font-size:14px;opacity:.9}';
+  pzCss.textContent+='@media (min-width:900px){#side{background:'+pzHex(pzg('sideCol'),pzg('sideA'))+'!important;'+(pzg('sideA')<5?'border-color:transparent!important;':'')+'}}.topbar{background:'+pzHex(pzg('topCol'),pzg('topA'))+'!important;color:'+pzg('topTx')+'!important;'+(pzg('topA')<5?'border-color:transparent!important;':'')+'}#display-username{color:'+pzg('topTx')+'!important}'+(pzg('topOnly')?'.topbar>span:first-child,.topbar>span:last-child button{display:none!important}.topbar{justify-content:flex-end}':'')+'#toast{background:'+pzHex(pzg('ntCol'),pzg('ntA'))+'!important;color:'+pzg('ntTx')+'!important}';
+  const tm=document.querySelector('meta[name=theme-color]'); if(tm) tm.content=pzg('sbCol');
   const w=document.querySelector('.wg'); if(w){ let n=w.querySelector('.wg-note'); if(!n){ n=document.createElement('div'); n.className='wg-note'; w.querySelector('.wg-date').after(n); } n.textContent=pzg('wgNote'); n.style.display=pzg('wgNote')?'':'none'; }
 }
 function pzUI(){
   const labels=[...document.querySelectorAll('#side .nav')].map(n=>(n.querySelector('span')||{}).textContent).filter(Boolean);
   const d=document.createElement('div'), dock=pzg('dock').slice();
   const opt=v=>'<option value="">— none —</option>'+labels.map(l=>'<option'+(l===v?' selected':'')+'>'+l+'</option>').join('');
-  d.innerHTML='<h4>📱 Bottom bar (phone dock)</h4><div style="font-size:12px;color:#aaa;margin-bottom:6px">Pick which apps sit in the bar and in what order (left → right).</div>'
+  d.innerHTML='<div style="font-size:11px;color:#888">Build v3 – if you can see this line, the new file is loaded.</div><h4>📱 Bottom bar (phone dock)</h4><div style="font-size:12px;color:#aaa;margin-bottom:6px">Pick which apps sit in the bar and in what order (left → right).</div>'
    +[0,1,2,3,4].map(i=>'<select class="pzDk" style="margin:0 6px 6px 0;max-width:46%">'+opt(dock[i])+'</select>').join('')
    +'<div class="user-card"><div>Bar colour</div><input type="color" id="pzDc" value="'+pzg('dockCol')+'" style="width:70px;height:34px"></div>'
    +'<div class="user-card"><div>Bar transparency</div><input type="range" id="pzDa" min="0" max="100" value="'+pzg('dockA')+'"></div>'
@@ -2909,18 +2971,146 @@ function pzUI(){
    +'<div class="user-card"><div>Widget opacity (left = transparent)</div><input type="range" id="pzWa" min="0" max="100" value="'+pzg('wgA')+'"></div>'
    +'<div class="user-card"><div>Text colour</div><input type="color" id="pzWt" value="'+pzg('wgTx')+'" style="width:70px;height:34px"></div>'
    +'<input type="text" id="pzWn" maxlength="40" placeholder="Text inside widget" value="'+pzg('wgNote').replace(/"/g,'&quot;')+'" style="width:100%;margin-top:6px">'
+   +'<h4>📋 Side bar (computer / tablet)</h4>'
+   +'<div class="user-card"><div>Side bar colour</div><input type="color" id="pzSc" value="'+pzg('sideCol')+'" style="width:70px;height:34px"></div>'
+   +'<div class="user-card"><div>Transparency (left = clear)</div><input type="range" id="pzSa" min="0" max="100" value="'+pzg('sideA')+'"></div>'
+   +'<h4>🔝 Top bar</h4>'
+   +'<div class="user-card"><div>Bar colour</div><input type="color" id="pzTc" value="'+pzg('topCol')+'" style="width:70px;height:34px"></div>'
+   +'<div class="user-card"><div>Transparency (left = clear)</div><input type="range" id="pzTa" min="0" max="100" value="'+pzg('topA')+'"></div>'
+   +'<div class="user-card"><div>Text colour</div><input type="color" id="pzTt" value="'+pzg('topTx')+'" style="width:70px;height:34px"></div>'
+   +'<label style="display:block;margin:8px 0"><input type="checkbox" id="pzTo"'+(pzg('topOnly')?' checked':'')+'> Show only my username (hide other buttons)</label>'
+   +'<div class="user-card"><div>Phone status-bar colour</div><input type="color" id="pzSb" value="'+pzg('sbCol')+'" style="width:70px;height:34px"></div>'
+   +'<h4>🔔 Notification pop-up</h4>'
+   +'<div class="user-card"><div>Colour</div><input type="color" id="pzNc" value="'+pzg('ntCol')+'" style="width:70px;height:34px"></div>'
+   +'<div class="user-card"><div>Transparency</div><input type="range" id="pzNa" min="0" max="100" value="'+pzg('ntA')+'"></div>'
+   +'<div class="user-card"><div>Text colour</div><input type="color" id="pzNt" value="'+pzg('ntTx')+'" style="width:70px;height:34px"></div>'
+   +'<button class="btn gray" style="width:100%;margin-top:6px" onclick="toast(\'🔔 Sample notification\')">Preview notification</button>'
    +'<h4>🎨 Icons</h4><div class="user-card"><div>Icon box colour</div><input type="color" id="pzIc" value="'+(TSX.col||'#2a0b0b')+'" style="width:70px;height:34px"></div>'
    +'<button class="btn" style="width:100%;margin-top:8px" onclick="tsToggle()">✂️ Transparent icons on / off</button>'
    +'<button class="btn gray" style="width:100%;margin-top:8px" onclick="pzReset()">Reset all</button>';
   const h=document.querySelector('#settingsModal .modal-body h4'); h.parentNode.insertBefore(d,h);
   d.addEventListener('change',e=>{ if(e.target.classList.contains('pzDk')){ PZ.dock=[...d.querySelectorAll('.pzDk')].map(s=>s.value).filter(Boolean); pzApply(1); } });
   const bind=(id,k,f)=>d.querySelector('#'+id).addEventListener('input',e=>{ PZ[k]=f?f(e.target.value):e.target.value; pzApply(1); });
-  bind('pzDc','dockCol'); bind('pzDa','dockA',Number); bind('pzWc','wgCol'); bind('pzWa','wgA',Number); bind('pzWt','wgTx'); bind('pzWn','wgNote');
+  bind('pzDc','dockCol'); bind('pzDa','dockA',Number); bind('pzWc','wgCol'); bind('pzWa','wgA',Number); bind('pzWt','wgTx'); bind('pzWn','wgNote'); bind('pzTc','topCol'); bind('pzSc','sideCol'); bind('pzSa','sideA',Number); bind('pzTa','topA',Number); bind('pzTt','topTx'); bind('pzSb','sbCol'); bind('pzNc','ntCol'); bind('pzNa','ntA',Number); bind('pzNt','ntTx');
+  d.querySelector('#pzTo').addEventListener('change',e=>{ PZ.topOnly=e.target.checked?1:0; pzApply(1); });
   d.querySelector('#pzIc').addEventListener('input',e=>tsColor(e.target.value));
 }
 window.pzReset=()=>{ Object.keys(PZ).forEach(k=>delete PZ[k]); try{ localStorage.removeItem('pz'); }catch(e){} tsReset(); pzApply(0); const o=document.querySelector('#settingsModal .modal-body h4').previousElementSibling; };
 const _omP=openModal; openModal=function(id){ if(id==='settingsModal'){ const L=[...document.querySelectorAll('#side .nav')].map(n=>(n.querySelector('span')||{}).textContent).filter(Boolean), dk=pzg('dock'); document.querySelectorAll('.pzDk').forEach((sel,i)=>{ sel.innerHTML='<option value="">— none —</option>'+L.map(l=>'<option'+(l===dk[i]?' selected':'')+'>'+l+'</option>').join(''); }); } _omP(id); };
 pzUI(); setTimeout(()=>pzApply(0),300); setTimeout(()=>pzApply(0),1500);
+
+/* ===== More games: Memory Match, Connect Four (vs computer), Flappy ===== */
+const gRew=(g,sc)=>socket.emit('game_reward',{game:g,win:true,score:sc});
+/* Memory Match */
+const mmBody=el('div',{style:{textAlign:'center'}});
+mmBody.innerHTML='<div id="mmInfo" style="margin:6px"></div><div id="mmGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:340px;margin:8px auto"></div><button class="btn" onclick="mmNew()">🔄 New game</button>';
+mkApp('mmApp','Memory Match','🧠','Memory',mmBody);
+let MM=null;
+function mmNew(){ const e=['🍎','🐶','🚗','⚽','🌙','🎲','🍕','🐱'], a=[...e,...e].sort(()=>Math.random()-.5); MM={a,open:[],done:new Set(),mv:0,lock:0}; mmDraw(); }
+function mmDraw(){ $('mmGrid').innerHTML=MM.a.map((x,i)=>{ const s=MM.done.has(i)||MM.open.includes(i); return '<button onclick="mmTap('+i+')" style="height:72px;font-size:32px;border-radius:12px;border:0;background:'+(s?'#fff':'#b71c1c')+'">'+(s?x:'?')+'</button>'; }).join(''); $('mmInfo').textContent='Moves: '+MM.mv+'   Pairs: '+MM.done.size/2+'/8'; }
+window.mmTap=i=>{ const M=MM; if(M.lock||M.open.includes(i)||M.done.has(i)) return; M.open.push(i); mmDraw();
+  if(M.open.length===2){ M.mv++; const [a,b]=M.open;
+    if(M.a[a]===M.a[b]){ M.done.add(a); M.done.add(b); M.open=[]; mmDraw(); if(M.done.size===16){ $('mmInfo').textContent='🎉 Done in '+M.mv+' moves!'; gRew('memory',100); } }
+    else{ M.lock=1; setTimeout(()=>{ M.open=[]; M.lock=0; mmDraw(); },700); } } };
+/* Connect Four vs computer */
+const c4Body=el('div',{style:{textAlign:'center'}});
+c4Body.innerHTML='<div id="c4Info" style="margin:6px"></div><div id="c4G" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:340px;margin:auto;background:#1565c0;padding:6px;border-radius:10px"></div><button class="btn" style="margin-top:8px" onclick="c4New()">🔄 New game</button>';
+mkApp('c4App','Connect Four','🔴','Connect 4',c4Body);
+let C4=null;
+function c4New(){ C4={b:Array.from({length:6},()=>Array(7).fill(0)),over:0,t:1,msg:'Your turn (red) – tap a column'}; c4Draw(); }
+const c4Win=(b,p)=>{ for(let r=0;r<6;r++) for(let c=0;c<7;c++) for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){ let k=0; for(;k<4;k++){ const y=r+dr*k,x=c+dc*k; if(y<0||y>5||x<0||x>6||b[y][x]!==p) break; } if(k===4) return 1; } return 0; };
+const c4Row=(b,c)=>{ for(let r=5;r>=0;r--) if(!b[r][c]) return r; return -1; };
+function c4Draw(){ const S=C4; $('c4G').innerHTML=S.b.map(row=>row.map((v,c)=>'<div onclick="c4Drop('+c+')" style="aspect-ratio:1;border-radius:50%;background:'+(v===1?'#e53935':v===2?'#fdd835':'#0d47a1')+'"></div>').join('')).join(''); $('c4Info').textContent=S.msg; }
+window.c4Drop=c=>{ const S=C4; if(!S||S.over||S.t!==1) return; const r=c4Row(S.b,c); if(r<0) return; S.b[r][c]=1;
+  if(c4Win(S.b,1)){ S.over=1; S.msg='🏆 You win!'; c4Draw(); gRew('c4',100); return; }
+  S.t=2; S.msg='Computer is thinking…'; c4Draw();
+  setTimeout(()=>{ if(C4!==S) return; let col=-1;
+    for(const p of [2,1]){ for(let c2=0;c2<7;c2++){ const r2=c4Row(S.b,c2); if(r2<0) continue; S.b[r2][c2]=p; const w=c4Win(S.b,p); S.b[r2][c2]=0; if(w){ col=c2; break; } } if(col>=0) break; }
+    if(col<0){ const o=[3,2,4,1,5,0,6].filter(x=>c4Row(S.b,x)>=0); col=o.length?o[Math.floor(Math.random()*Math.min(3,o.length))]:-1; }
+    if(col<0){ S.over=1; S.msg='Draw'; c4Draw(); return; }
+    S.b[c4Row(S.b,col)][col]=2; if(c4Win(S.b,2)){ S.over=1; S.msg='Computer wins'; } else S.msg='Your turn'; S.t=1; c4Draw(); },500); };
+/* Flappy */
+const flBody=el('div',{style:{textAlign:'center'}});
+flBody.innerHTML='<canvas id="flCv" width="240" height="360" style="height:60vh;max-height:420px;border-radius:8px;background:#4fc3f7;touch-action:none"></canvas><div id="flInfo" style="margin:4px">Tap to flap</div>';
+mkApp('flApp','Flappy','🐤','Flappy',flBody);
+let FL=null;
+function flNew(){ FL={y:180,v:0,p:[],f:0,s:0,over:0}; flLoop(); }
+window.flTap=()=>{ if(!FL||FL.over) return flNew(); FL.v=-5.5; };
+$('flCv').addEventListener('pointerdown',()=>flTap());
+document.addEventListener('keydown',e=>{ if(e.code==='Space'&&$('flApp').style.display==='flex'){ e.preventDefault(); flTap(); } });
+function flLoop(){ const F=FL; if(!F||F.over||$('flApp').style.display!=='flex') return; F.v+=.35; F.y+=F.v; F.f++;
+  if(F.f%90===0) F.p.push({x:240,g:80+Math.random()*190}); F.p.forEach(p=>p.x-=2); F.p=F.p.filter(p=>p.x>-50);
+  F.p.forEach(p=>{ if(!p.d&&p.x+40<40){ p.d=1; F.s++; } if(p.x<60&&p.x+40>40&&(F.y<p.g-48||F.y>p.g+48)) F.over=1; }); if(F.y<0||F.y>360) F.over=1;
+  const c=$('flCv').getContext('2d'); c.fillStyle='#4fc3f7'; c.fillRect(0,0,240,360); c.fillStyle='#2e7d32'; F.p.forEach(p=>{ c.fillRect(p.x,0,40,p.g-48); c.fillRect(p.x,p.g+48,40,360); });
+  c.font='24px sans-serif'; c.fillText('🐤',38,F.y+8); $('flInfo').textContent='Score '+F.s+(F.over?' – game over, tap to retry':'');
+  if(F.over){ if(F.s>=5) gRew('flap',F.s*10); } else requestAnimationFrame(flLoop); }
+const _omG3=openModal; openModal=function(id){ _omG3(id); if(id==='mmApp'&&!MM) mmNew(); if(id==='c4App'&&!C4) c4New(); if(id==='flApp'&&!FL) flNew(); };
+const mgCss=document.createElement('style'); mgCss.textContent='.mm{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:360px;margin:10px auto}.mmc{aspect-ratio:1;border-radius:12px;background:#5c1818;border:2px solid #7a2a2a;font-size:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:transparent;user-select:none}.mmc.up{background:#fff8e1;color:#000}.mmc.ok{background:#2e7d32;color:#fff;border-color:#66bb6a}.c4{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:360px;margin:10px auto;background:#1e5fd6;padding:8px;border-radius:12px}.c4 b{aspect-ratio:1;border-radius:50%;background:#0b1f4d;cursor:pointer}.c4 b.r{background:#e53935}.c4 b.y{background:#fdd835}'; document.head.append(mgCss);
+/* ===== all game apps live in the Games section only ===== */
+setTimeout(()=>{
+  const body=document.querySelector('#gamesModal .modal-body'); if(!body||document.getElementById('gamesMore')) return;
+  const d=document.createElement('div'); d.id='gamesMore'; d.innerHTML='<h4>🎮 More games</h4><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px"></div>';
+  GAMELIST.forEach(g=>{ const b=document.createElement('button'); b.className='btn'; b.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;background:#2a0b0b;border:1px solid #4a1a1a'; b.innerHTML='<span style="font-size:28px">'+g.icon+'</span><span style="font-size:11px">'+g.label+'</span>'; b.onclick=()=>openModal(g.id); d.lastChild.append(b); });
+  body.insertBefore(d,body.firstChild);
+},0);
+const _cmG=closeModal; closeModal=function(id){ _cmG(id); if(GAMEIDS.includes(id)&&!window._noRet) openGames(); };
+const _ghG=goHome; goHome=function(){ window._noRet=1; try{ _ghG(); }finally{ window._noRet=0; } };
+/* Snakes & Ladders: you vs 1-3 computer players */
+const slBody=el('div',{style:{textAlign:'center'}});
+slBody.innerHTML='<div>Computer players: <select id="slN"><option>1</option><option>2</option><option>3</option></select> <button class="btn sm green" onclick="slNew()">▶ Start</button></div><canvas id="slCv" width="300" height="300" style="width:100%;max-width:400px;margin-top:8px;border-radius:8px"></canvas><div id="slInfo" style="margin:6px;min-height:20px"></div><button class="btn" id="slRoll" onclick="slRoll()">🎲 Roll</button>';
+mkApp('slApp','Snakes & Ladders','🐍','Snakes&Ladders',slBody);
+const SLL={4:25,9:31,21:42,28:84,36:44,51:67,71:91,80:100}, SLS={17:7,54:34,62:19,64:60,87:24,93:73,95:75,98:79}, SLC=['#e53935','#43a047','#fdd835','#1e88e5'];
+let SL=null;
+const slXY=n=>{ const r=Math.floor((n-1)/10); let c=(n-1)%10; if(r%2) c=9-c; return [c*30+15,(9-r)*30+15]; };
+function slNew(){ const n=+$('slN').value+1; SL={p:Array(n).fill(0),t:0,busy:0,over:0,msg:'Your turn'}; slDraw(); }
+function slDraw(){ const cv=$('slCv'),c=cv.getContext('2d'); if(!SL) return;
+  for(let i=1;i<=100;i++){ const [x,y]=slXY(i); c.fillStyle=(Math.floor((i-1)/10)+(i-1)%10)%2?'#ffe0b2':'#fff3e0'; c.fillRect(x-15,y-15,30,30); c.fillStyle='#8d6e63'; c.font='8px sans-serif'; c.fillText(i,x-13,y-6); }
+  c.lineWidth=4; Object.entries(SLL).forEach(([a,b])=>{ const A=slXY(+a),B=slXY(b); c.strokeStyle='#2e7d32'; c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke(); });
+  Object.entries(SLS).forEach(([a,b])=>{ const A=slXY(+a),B=slXY(b); c.strokeStyle='#c62828'; c.beginPath(); c.moveTo(A[0],A[1]); c.lineTo(B[0],B[1]); c.stroke(); });
+  SL.p.forEach((p,i)=>{ const [x,y]=slXY(Math.max(p,1)); c.beginPath(); c.arc(x-6+i*4,y+4,7,0,7); c.fillStyle=SLC[i]; c.fill(); c.strokeStyle='#000'; c.lineWidth=1.5; c.stroke(); });
+  $('slInfo').textContent=SL.msg; }
+function slRoll(){ const S=SL; if(!S||S.busy||S.over||S.t!==0) return; slGo(); }
+function slGo(){ const S=SL, i=S.t, d=1+Math.floor(Math.random()*6); S.busy=1; S.msg=(i?'CPU '+i:'You')+' rolled '+d; let n=S.p[i]+d; if(n>100) n=S.p[i]; S.p[i]=n; slDraw();
+  setTimeout(()=>{ if(SL!==S) return; const j=SLL[n]||SLS[n]; if(j){ S.p[i]=j; S.msg+=SLL[n]?' – ladder up! 🪜':' – snake! 🐍'; }
+    if(S.p[i]===100){ S.over=1; S.msg=i?'CPU '+i+' wins!':'🏆 You win!'; slDraw(); if(!i) gRew('snl',100); return; }
+    S.t=d===6?i:(i+1)%S.p.length; S.busy=0; slDraw(); if(S.t!==0) setTimeout(()=>{ if(SL===S&&!S.over) slGo(); },900); },600); }
+/* Car racing: Endless or 60-second Timed, collect coins */
+const rcBody=el('div',{style:{textAlign:'center'}});
+rcBody.innerHTML='<div><button class="btn green" onclick="rcNew(\'endless\')">♾ Endless</button> <button class="btn blue" onclick="rcNew(\'timed\')">⏱ 60s Timed</button></div><canvas id="rcCv" width="240" height="400" style="height:60vh;max-height:420px;margin-top:8px;border-radius:8px;background:#333;touch-action:none"></canvas><div id="rcInfo" style="margin:4px"></div><button class="btn" onclick="rcMove(-1)">◀</button> <button class="btn" onclick="rcMove(1)">▶</button><br><small style="color:#888">Dodge cars, grab 🪙. Endless ends on crash; Timed: a crash costs 3 s. Coins you collect become real coins.</small>';
+mkApp('rcApp','Car Racing','🏎️','Racing',rcBody);
+let RC=null;
+function rcNew(mode){ RC={mode,lane:1,o:[],k:[],sp:4,score:0,coins:0,t:mode==='timed'?60:0,over:0,f:0,off:0,last:performance.now()}; rcLoop(); }
+window.rcMove=d=>{ if(RC&&!RC.over) RC.lane=Math.max(0,Math.min(2,RC.lane+d)); };
+document.addEventListener('keydown',e=>{ if(e.key==='ArrowLeft') rcMove(-1); if(e.key==='ArrowRight') rcMove(1); });
+$('rcCv').addEventListener('pointerdown',e=>{ const r=e.target.getBoundingClientRect(); rcMove(e.clientX<r.left+r.width/2?-1:1); });
+function rcLoop(){ const R=RC; if(!R||R.over||$('rcApp').style.display!=='flex') return; const now=performance.now(), dt=Math.min(.05,(now-R.last)/1000); R.last=now; R.f++;
+  R.sp=4+Math.min(8,R.score/400); R.off=(R.off+R.sp*2)%40; R.score+=R.sp*.5; if(R.mode==='timed'){ R.t-=dt; if(R.t<=0) return rcEnd(); }
+  if(R.f%45===0){ const l=Math.floor(Math.random()*3); R.o.push({l,y:-40}); if(Math.random()<.7) R.k.push({l:(l+1+Math.floor(Math.random()*2))%3,y:-90}); }
+  R.o.forEach(o=>o.y+=R.sp*1.6); R.k.forEach(k=>k.y+=R.sp*1.6);
+  R.k=R.k.filter(k=>{ if(k.l===R.lane&&Math.abs(k.y-330)<30){ R.coins++; return false; } return k.y<420; });
+  R.o=R.o.filter(o=>{ if(o.l===R.lane&&Math.abs(o.y-330)<42){ if(R.mode==='endless'){ R.crash=1; } else{ R.t-=3; R.flash=10; } return false; } return o.y<420; });
+  if(R.crash) return rcEnd(); rcDraw(); requestAnimationFrame(rcLoop); }
+function rcDraw(){ const R=RC,c=$('rcCv').getContext('2d'); c.fillStyle='#444'; c.fillRect(0,0,240,400); c.fillStyle='#fff'; for(let y=-40+R.off;y<400;y+=40){ c.fillRect(78,y,4,20); c.fillRect(158,y,4,20); }
+  R.k.forEach(k=>{ c.font='24px sans-serif'; c.fillText('🪙',k.l*80+28,k.y+8); }); R.o.forEach(o=>{ c.fillStyle='#1e88e5'; c.fillRect(o.l*80+22,o.y-20,36,50); c.fillStyle='#bbdefb'; c.fillRect(o.l*80+26,o.y-12,28,12); });
+  c.fillStyle=R.flash-->0?'#fff':'#e53935'; c.fillRect(R.lane*80+22,310,36,50); c.fillStyle='#ffcdd2'; c.fillRect(R.lane*80+26,318,28,12);
+  $('rcInfo').textContent='Score '+Math.floor(R.score)+'  🪙 '+R.coins+(R.mode==='timed'?'  ⏱ '+Math.max(0,Math.ceil(R.t))+'s':''); }
+function rcEnd(){ const R=RC; R.over=1; rcDraw(); $('rcInfo').textContent='Game over! Score '+Math.floor(R.score)+'  🪙 '+R.coins; if(R.coins) gRew('race',R.coins*10); }
+/* Maze escape (first person) */
+const mzBody=el('div',{style:{textAlign:'center'}});
+mzBody.innerHTML='<canvas id="mzCv" width="320" height="200" style="width:100%;max-width:480px;border-radius:8px"></canvas><div id="mzInfo" style="margin:4px"></div><div><button class="btn" onclick="mzStep(0,-1)">⟲</button> <button class="btn" onclick="mzStep(1,0)">▲ Forward</button> <button class="btn" onclick="mzStep(-1,0)">▼</button> <button class="btn" onclick="mzStep(0,1)">⟳</button></div><button class="btn gray" style="margin-top:8px" onclick="mzNew()">🔄 New maze</button><br><small style="color:#888">Find the gold exit in the far corner. Arrow keys also work.</small>';
+mkApp('mzApp','Maze Escape','🧭','Maze',mzBody);
+let MZ=null;
+function mzNew(){ const N=21,g=Array.from({length:N},()=>Array(N).fill(1));
+  (function carve(x,y){ g[y][x]=0; [[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-.5).forEach(([dx,dy])=>{ const nx=x+dx,ny=y+dy; if(nx>0&&ny>0&&nx<N-1&&ny<N-1&&g[ny][nx]){ g[y+dy/2][x+dx/2]=0; carve(nx,ny); } }); })(1,1);
+  MZ={g,N,x:1.5,y:1.5,a:0,t0:Date.now(),done:0}; mzDraw(); }
+window.mzStep=(f,r)=>{ const M=MZ; if(!M||M.done) return; M.a+=r*.25; if(f){ const nx=M.x+Math.cos(M.a)*f*.3, ny=M.y+Math.sin(M.a)*f*.3; if(!M.g[Math.floor(M.y)][Math.floor(nx)]) M.x=nx; if(!M.g[Math.floor(ny)][Math.floor(M.x)]) M.y=ny; }
+  if(Math.floor(M.x)===M.N-2&&Math.floor(M.y)===M.N-2){ M.done=1; const s=Math.round((Date.now()-M.t0)/1000); $('mzInfo').textContent='🎉 Escaped in '+s+'s!'; gRew('maze',Math.max(10,300-s)); } mzDraw(); };
+document.addEventListener('keydown',e=>{ if($('mzApp').style.display!=='flex') return; if(e.key==='ArrowUp') mzStep(1,0); if(e.key==='ArrowDown') mzStep(-1,0); if(e.key==='ArrowLeft') mzStep(0,-1); if(e.key==='ArrowRight') mzStep(0,1); });
+function mzDraw(){ const M=MZ,c=$('mzCv').getContext('2d'),W=320,H=200; c.fillStyle='#223'; c.fillRect(0,0,W,H/2); c.fillStyle='#432'; c.fillRect(0,H/2,W,H/2);
+  for(let x=0;x<W;x+=2){ const ang=M.a+(x/W-.5), dx=Math.cos(ang), dy=Math.sin(ang); let d=0,hit=0; while(d<20){ d+=.03; const cx=Math.floor(M.x+dx*d), cy=Math.floor(M.y+dy*d); if(M.g[cy]&&M.g[cy][cx]){ hit=1; break; } if(cx===M.N-2&&cy===M.N-2){ hit=2; break; } }
+    const h=Math.min(H,H/(d*Math.cos(ang-M.a))), s=Math.max(.15,1-d/10); c.fillStyle=hit===2?'rgb(255,'+Math.floor(200*s)+',0)':'rgb('+Math.floor(180*s)+','+Math.floor(80*s)+','+Math.floor(80*s)+')'; if(hit) c.fillRect(x,(H-h)/2,2,h); }
+  for(let y=0;y<M.N;y++) for(let x=0;x<M.N;x++){ c.fillStyle=M.g[y][x]?'#0008':'#fff4'; c.fillRect(x*3,y*3,3,3); } c.fillStyle='#0f0'; c.fillRect(M.x*3-1,M.y*3-1,3,3); }
+const _omG=openModal; openModal=function(id){ _omG(id); if(id==='slApp'&&!SL) slNew(); if(id==='mzApp'&&!MZ) mzNew(); if(id==='rcApp'&&!RC) rcNew('endless'); };
 
 /* ===== Quiz (AI writes the questions) ===== */
 const qzBody=el('div',{});
@@ -2962,7 +3152,7 @@ addEventListener('keydown',e=>{
 });
 
 /* ===== make the buttons reachable from onclick="..." (functions inside this block are private unless put on window) ===== */
-window.snNew=snNew; window.g48New=g48New; window.ludRoll=ludRoll; window.ludNew=ludNew; window.reportUser=reportUser;
+window.LSET=LSET; window.mmNew=mmNew; window.c4New=c4New; window.flNew=flNew; window.ludSetup=ludSetup; window.ludMenu=ludMenu; window.ludStartAI=ludStartAI; window.ludInvite=ludInvite; window.ludGo=ludGo; window.slNew=slNew; window.slRoll=slRoll; window.rcNew=rcNew; window.mzNew=mzNew; window.snNew=snNew; window.g48New=g48New; window.ludRoll=ludRoll; window.ludNew=ludNew; window.reportUser=reportUser;
 window.giftBtn=u=>'<button class="btn sm" title="Gift coins" onclick="giftCoins(\''+enc(u)+'\')">🎁</button>';
 window.giftCoins=e=>openGift(decodeURIComponent(e));
 })();
