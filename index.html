@@ -235,6 +235,32 @@ html,body{overflow:hidden;overscroll-behavior:none}
 @keyframes giftBounce{from{transform:translateY(0) rotate(-6deg)}to{transform:translateY(-18px) rotate(6deg)}}
 @media (prefers-reduced-motion:reduce){#giftPop .big{animation:none}}
 </style>
+<style id="layoutFix">
+/* laptop / TV: all apps visible, scroll with mouse wheel or arrow keys (no swipe needed) */
+@media (min-width:900px){
+  #pager{flex-direction:column;overflow-x:hidden;overflow-y:auto;scroll-snap-type:none;touch-action:auto;scrollbar-width:thin}
+  .page{flex:none;scroll-snap-align:none;scroll-snap-stop:normal;overflow:visible}
+  #dots{display:none!important}
+  .pgrid{--cols:8!important;grid-auto-rows:118px!important}
+  #side{overflow-y:auto}
+  #launcher{margin-bottom:0}
+}
+@media (min-width:1500px){.pgrid{--cols:10!important}}
+/* phone held sideways */
+@media (max-width:899px) and (max-height:500px){
+  #pager{flex-direction:column;overflow-x:hidden;overflow-y:auto;scroll-snap-type:none;touch-action:auto}
+  .page{flex:none;scroll-snap-align:none;scroll-snap-stop:normal;overflow:visible}
+  #dots{display:none!important}
+  .pgrid{--cols:8!important;grid-auto-rows:84px!important}
+  #side{height:52px!important;bottom:calc(4px + env(safe-area-inset-bottom,0px))!important;border-radius:20px!important}
+  #side .nav{width:42px!important;height:42px!important;font-size:22px!important;border-radius:14px!important}
+  #launcher{margin-bottom:62px!important}
+  #launcher .tile-app i{width:46px!important;height:46px!important;font-size:24px!important}
+  .wg{padding:8px 14px!important;max-width:360px!important;margin-bottom:6px!important}
+  .wg-time{font-size:30px!important}.wg-row,.wg-note{display:none!important}.wg-date{margin-top:2px!important;font-size:12px!important}
+  .topbar{padding:4px 10px!important}
+}
+</style>
 </head>
 <body>
 <div id="toast"></div>
