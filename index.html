@@ -931,7 +931,7 @@ socket.on('phone_need_name',({error})=>{ const n=prompt((error?error+'\n':'')+'P
 socket.on('auth_ok',()=>phReset());
 socket.on('init',()=>{ window._initSeen=1; try{ sessionStorage.removeItem('rl'); }catch(e){} });
 socket.on('auth_ok',()=>{ window._initSeen=0; setTimeout(()=>{ let tried=0; try{ tried=sessionStorage.getItem('rl'); }catch(e){}
-  if(!tried&&localStorage.getItem('token')&&($('authModal').style.display==='flex'||!window._initSeen)){ try{ sessionStorage.setItem('rl','1'); }catch(e){} location.reload(); } },2500); });
+  if(!tried&&localStorage.getItem('token')&&($('authModal').style.display==='flex'||!window._initSeen)){ try{ sessionStorage.setItem('rl','1'); }catch(e){} location.reload(); } },10000); });
 socket.on('google_need_name',({suggested,error})=>{
   const n=prompt((error?error+'\n':'')+'Choose your display name (spaces allowed):',suggested||'');
   if(n&&n.trim()) socket.emit('google_auth',{credential:pendingGoogle,name:n.trim(),clientId});
@@ -3625,3 +3625,4 @@ const _omH=openModal; openModal=function(id){ _omH(id); if(id==='chatApp') markS
 </script>
 </body>
 </html>
+  
