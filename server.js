@@ -604,7 +604,7 @@ const b64 = d => String(d).replace(/^data:image\/jpeg;base64,/, '');
 const AI_ON = () => !!(process.env.LOCAL_AI_URL || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.CEREBRAS_API_KEY);
 function aiProviders() {
   const tries = [];
-  if (process.env.LOCAL_AI_URL) tries.push({ url: process.env.LOCAL_AI_URL.replace(/\/+$/, '') + '/chat/completions', key: process.env.LOCAL_AI_KEY || '', models: [process.env.LOCAL_AI_MODEL || 'llama3.2'] });
+  if (process.env.LOCAL_AI_URL) tries.push({ url: process.env.LOCAL_AI_URL.replace(/\/+$/, '') + '/chat/completions', key: process.env.LOCAL_AI_KEY || '', models: (process.env.LOCAL_AI_MODEL || 'llama3.2').split(',').map(x => x.trim()).filter(Boolean) });
   if (process.env.CEREBRAS_API_KEY) tries.push({ url: 'https://api.cerebras.ai/v1/chat/completions', key: process.env.CEREBRAS_API_KEY, models: [process.env.CEREBRAS_MODEL || 'gpt-oss-120b'] });
   if (process.env.OPENROUTER_API_KEY) tries.push({ url: 'https://openrouter.ai/api/v1/chat/completions', key: process.env.OPENROUTER_API_KEY, models: [process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free', 'openrouter/free'] });
   if (process.env.GROQ_API_KEY) tries.push({ url: 'https://api.groq.com/openai/v1/chat/completions', key: process.env.GROQ_API_KEY, models: [process.env.GROQ_MODEL, 'meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'].filter(Boolean) });
@@ -659,6 +659,7 @@ const AIC = {
   }
 };
 async function callLLM(system, hist, imgs, maxTokens) {
+  const retried = {};
   for (const t of aiProviders()) for (const model of t.models) {
     try {
       const msgs = [{ role: 'system', content: system }].concat(hist.map((m, i) => (i === hist.length - 1 && imgs.length)
@@ -668,6 +669,7 @@ async function callLLM(system, hist, imgs, maxTokens) {
       const out = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
       if (out) return out;
       console.error('AI:', t.url.slice(0, 40), model, JSON.stringify(j).slice(0, 250));
+      if ((r.status === 503 || r.status === 429) && !retried[model]) { retried[model] = 1; await new Promise(z => setTimeout(z, 2500)); try { const r2 = await fetch(t.url, { method: 'POST', signal: AbortSignal.timeout(120000), headers: { 'content-type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) }, body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.7, messages: msgs }) }); const j2 = await r2.json(); const o2 = j2 && j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content; if (o2) return o2; } catch (e) { console.error('AI retry error:', e.message); } }
     } catch (e) { console.error('AI error:', e.message); }
   }
   return null;
@@ -687,6 +689,15 @@ async function genImage(prompt, ref) {
       if (im) { const d = im.inlineData || im.inline_data; return { img: 'data:' + (d.mimeType || d.mime_type || 'image/png') + ';base64,' + d.data, note: ps.filter(p => p.text).map(p => p.text).join('') }; }
       console.error('IMG:', model, JSON.stringify(j).slice(0, 300));
     } catch (e) { console.error('IMG error:', e.message); }
+  }
+  if (process.env.CF_ACCOUNT_ID && process.env.CF_API_TOKEN) {
+    try {
+      const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + process.env.CF_ACCOUNT_ID + '/ai/run/@cf/black-forest-labs/flux-1-schnell', { method: 'POST', signal: AbortSignal.timeout(90000), headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + process.env.CF_API_TOKEN }, body: JSON.stringify({ prompt: prompt.slice(0, 2000), steps: 6 }) });
+      const j = await r.json();
+      const b = j && j.result && j.result.image;
+      if (b) return { img: 'data:image/jpeg;base64,' + b, note: '' };
+      console.error('IMG Cloudflare:', r.status, JSON.stringify(j).slice(0, 250));
+    } catch (e) { console.error('IMG Cloudflare error:', e.message); }
   }
   try {
     const r = await fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt.slice(0, 500)) + '?width=1024&height=1024&nologo=true', { signal: AbortSignal.timeout(90000) });
