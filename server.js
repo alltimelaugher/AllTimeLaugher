@@ -690,6 +690,7 @@ async function genImage(prompt, ref) {
       console.error('IMG:', model, JSON.stringify(j).slice(0, 300));
     } catch (e) { console.error('IMG error:', e.message); }
   }
+  if (ref) return null;
   if (process.env.CF_ACCOUNT_ID && process.env.CF_API_TOKEN) {
     try {
       const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + process.env.CF_ACCOUNT_ID + '/ai/run/@cf/black-forest-labs/flux-1-schnell', { method: 'POST', signal: AbortSignal.timeout(90000), headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + process.env.CF_API_TOKEN }, body: JSON.stringify({ prompt: prompt.slice(0, 2000), steps: 6 }) });
@@ -1216,7 +1217,8 @@ io.on('connection', (socket) => {
     if (!chat) chat = { id: uid(), u: me, title: '', msgs: [], t: Date.now() };
     chat.msgs.push({ role: 'user', content: text, files: files.map(f => f.name), ftxt: files.map(f => '[File: ' + f.name + ']\n' + f.text).join('\n\n'), th });
     if (!chat.title) chat.title = (text || (files[0] && files[0].name) || 'New chat').replace(/\s+/g, ' ').slice(0, 40);
-    const wantImg = d.mode === 'image' || /\b(generate|create|make|draw|design|produce)\b[^.\n]{0,25}\b(image|picture|photo|logo|poster|wallpaper|illustration|drawing)\b/i.test(text);
+    const editPhoto = imgs.length && text && /\b(make|put|place|stand|standing|add|remove|replace|change|turn|edit|convert|transform|paint|background|behind|next to|near|beside|wearing|dress|style)\b/i.test(text) && !/\b(what|who|why|how|describe|explain|read|summari[sz]e|translate|extract|tell|identify|solve)\b|\?/i.test(text);
+    const wantImg = d.mode === 'image' || editPhoto || /\b(generate|create|make|draw|design|produce)\b[^.\n]{0,25}\b(image|picture|photo|logo|poster|wallpaper|illustration|drawing)\b/i.test(text);
     let reply = null;
     if (wantImg && text) {
       const g = await genImage(text, imgs[0]);
@@ -1237,7 +1239,7 @@ io.on('connection', (socket) => {
     if (!reply) {
       chat.msgs.pop();
       if (chat.msgs.length) await AIC.put(chat);
-      return aiErr(isNew ? null : chat.id, wantImg && text ? 'Could not create the image (the image service is busy or not enabled for your key). Check Render Logs for lines starting with "IMG".' : (AI_ON() ? 'The AI is set up but did not answer (busy, wrong model name, or bad key). Owner: check Render Logs for lines starting with "AI:".' : 'The AI is not set up on this server yet.'));
+      return aiErr(isNew ? null : chat.id, wantImg && text ? (imgs.length ? 'Editing your photo needs Google Nano Banana, and your Gemini key has no image quota (it needs billing turned on in Google AI Studio). Free image services can only create new pictures from text, not edit your photo, so I did not make a fake one.' : 'Could not create the image (the image service is busy or not enabled for your key). Check Render Logs for lines starting with "IMG".') : (AI_ON() ? 'The AI is set up but did not answer (busy, wrong model name, or bad key). Owner: check Render Logs for lines starting with "AI:".' : 'The AI is not set up on this server yet.'));
     }
     chat.msgs.push({ role: 'assistant', content: reply.text, img: '' });
     await AIC.put(chat);
