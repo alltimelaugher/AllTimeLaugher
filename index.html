@@ -12,7 +12,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Gemini OS"/>
 <style>
-#adminBtn{display:none!important}
 :root{--bg:#0c0202;--pn:#1f0606;--bd:#3d1515;--ac:#e05656;--tx:#e5b3b3;--hi:#ff8a8a}
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -858,7 +857,7 @@ const L_TV=_L.get('tv'); if(L_TV){ try{ sessionStorage.setItem('tvCode',L_TV); }
 if(location.search) history.replaceState(null,'',location.pathname);
 
 // ================= accounts =================
-function adminShow(on){ const b=$('adminBtn'); if(b) b.style.display=on?'block':'none'; document.querySelectorAll('#adminTile,.tile-app').forEach(t=>{ if(t.id==='adminTile'||/^🛡/.test(t.textContent.trim())) t.style.display=on?'block':'none'; }); }
+function adminShow(on){ try{ window.launcherAdmin&&window.launcherAdmin(on); }catch(e){} const b=$('adminBtn'); if(b) b.style.display=on?'block':'none'; document.querySelectorAll('#adminTile,.tile-app').forEach(t=>{ if(t.id==='adminTile'||/^🛡/.test(t.textContent.trim())) t.style.display=on?'block':'none'; }); }
 function showName(){ $('display-username').innerText = me ? '👤 '+me+' · Log out' : ''; $('heroName').innerText = me; }
 function showAuth(msg){ $('authModal').style.display='flex'; if(msg) $('authMsg').innerText=msg; }
 function setAuthMode(m,msg){
@@ -3570,6 +3569,7 @@ pager.addEventListener('touchstart',e=>{ sx=e.touches[0].clientX; sy=e.touches[0
 pager.addEventListener('touchend',e=>{ const q=e.changedTouches[0]; if(!edit&&!drag&&q.clientY-sy>110&&Math.abs(q.clientX-sx)<60) openSearch(); },{passive:true});
 
 /* ---------- start ---------- */
+window.launcherAdmin=on=>{ sync(); nodes.forEach(n=>{ if(n.id==='adminTile') n.style.display=on?'block':'none'; }); later(); };
 new MutationObserver(()=>{ if(sync()) later(); }).observe(reg,{childList:true});
 addEventListener('resize',()=>{ if(drag) return; if(innerWidth!==lastW||Math.abs((pager.clientHeight||0)-lastH)>40) later(); });
 addEventListener('orientationchange',later);
