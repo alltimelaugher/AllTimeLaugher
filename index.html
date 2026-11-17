@@ -2938,17 +2938,126 @@ const _omL=openModal; openModal=function(id){ _omL(id); if(id==='ludApp'&&!LUD&&
   socket.on('init',()=>{ if(window.Notification&&Notification.permission==='default'&&!sessionStorage.getItem('ntAsk')){ sessionStorage.setItem('ntAsk','1'); setTimeout(()=>inAppNotify('🔔 Turn on notifications','Tap here to allow alerts for messages and calls',()=>enablePush(true),9000),1500); } });
 })();
 
-/* ===== Claude AI chat app ===== */
-const aiBody=el('div',{});
-aiBody.innerHTML='<div id="aiLog" style="height:55vh;overflow:auto;padding:6px"></div><div style="display:flex;gap:6px;margin-top:8px"><input id="aiIn" placeholder="Ask Claude anything…" style="flex:1"><button class="btn green" id="aiSend">Send</button></div><div style="margin-top:6px"><button class="btn gray sm" id="aiClr">🗑 Clear chat</button></div><small style="color:#888">The server owner must set ANTHROPIC_API_KEY (or GROQ_API_KEY) for answers.</small>';
-mkApp('aiApp','Claude AI','✨','Claude AI',aiBody);
-const AIH=[]; let aiBusy=0, aiTyp=null;
-function aiAdd(role,text){ const d=document.createElement('div'); d.style.cssText='margin:6px 0;padding:8px 12px;border-radius:12px;max-width:88%;white-space:pre-wrap;'+(role==='user'?'background:#5c1818;margin-left:auto':'background:#2a0b0b;border:1px solid #4a1a1a'); d.textContent=text; $('aiLog').append(d); $('aiLog').scrollTop=1e9; return d; }
-function aiSend(){ const i=$('aiIn'),t=i.value.trim(); if(!t||aiBusy) return; i.value=''; AIH.push({role:'user',content:t}); aiAdd('user',t); aiTyp=aiAdd('assistant','…'); aiBusy=1; socket.emit('ai_chat',{msgs:AIH}); }
-$('aiSend').addEventListener('click',aiSend); $('aiIn').addEventListener('keydown',e=>{ if(e.key==='Enter') aiSend(); });
-$('aiClr').addEventListener('click',()=>{ AIH.length=0; $('aiLog').innerHTML=''; aiAdd('assistant','Hi! I\'m Claude. Ask me anything.'); });
-socket.on('ai_reply',r=>{ aiBusy=0; if(aiTyp) aiTyp.remove(); if(r.text){ AIH.push({role:'assistant',content:r.text}); aiAdd('assistant',r.text); } else aiAdd('assistant','⚠️ '+(r.err||'No answer')); });
-aiAdd('assistant','Hi! I\'m Claude. Ask me anything.');
+/* ===== Gemini chat app (many saved chats, files, photos, voice, PDF, image creation) ===== */
+(function(){
+const G=id=>document.getElementById(id);
+const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+//START_MD
+function aiMd(s){
+  const bl=[]; s=String(s).replace(/```\w*\n?([\s\S]*?)```/g,(m,c)=>{ bl.push('<pre><code>'+esc(c)+'</code></pre>'); return '\u0001'+(bl.length-1)+'\u0001'; });
+  const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const o=[]; let li=null, tb=0; const cl=()=>{ if(li){o.push('</'+li+'>');li=null;} if(tb){o.push('</table>');tb=0;} };
+  s.split('\n').forEach(l=>{ let m;
+    if((m=/^(#{1,6})\s+(.*)/.exec(l))){ cl(); const n=Math.min(m[1].length+1,5); o.push('<h'+n+'>'+inl(m[2])+'</h'+n+'>'); }
+    else if((m=/^\s*[-*]\s+(.*)/.exec(l))){ if(li!=='ul'){cl();o.push('<ul>');li='ul';} o.push('<li>'+inl(m[1])+'</li>'); }
+    else if((m=/^\s*\d+[.)]\s+(.*)/.exec(l))){ if(li!=='ol'){cl();o.push('<ol>');li='ol';} o.push('<li>'+inl(m[1])+'</li>'); }
+    else if(/^\s*\|.*\|\s*$/.test(l)){ if(/^[\s|:-]+$/.test(l)) return; if(!tb){cl();o.push('<table>');tb=1;} o.push('<tr>'+l.trim().slice(1,-1).split('|').map(c=>'<td>'+inl(c.trim())+'</td>').join('')+'</tr>'); }
+    else if(/^\u0001\d+\u0001$/.test(l.trim())){ cl(); o.push(l.trim()); }
+    else if(!l.trim()) cl(); else { cl(); o.push('<p>'+inl(l)+'</p>'); } });
+  cl(); return o.join('').replace(/\u0001(\d+)\u0001/g,(m,i)=>bl[i]);
+}
+//END_MD
+const st=document.createElement('style'); st.textContent=`
+#aiApp .modal-body{display:flex;padding:0;overflow:hidden;position:relative}
+#gmSide{width:240px;flex:none;border-right:1px solid var(--bd);display:flex;flex-direction:column;background:var(--pn)}
+#gmList{flex:1;overflow-y:auto;padding:4px 8px}
+.gmCh{display:flex;align-items:center;gap:6px;padding:9px 10px;border-radius:10px;cursor:pointer;font-size:13px}
+.gmCh span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gmCh:hover,.gmCh.act{background:#3a1010}.gmCh i{font-style:normal;opacity:.6}
+#gmMain{flex:1;min-width:0;display:flex;flex-direction:column}
+#gmTop{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--bd)}
+#gmTitle{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bold;background:linear-gradient(90deg,#6ea8ff,#c58bff,#ff8a8a);-webkit-background-clip:text;background-clip:text;color:transparent}
+#gmLog{flex:1;overflow-y:auto;padding:12px 14px}
+.gmU{background:#5c1818;margin:8px 0 8px auto;max-width:85%;width:fit-content;padding:8px 12px;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.gmA{margin:10px 0;line-height:1.55;overflow-wrap:anywhere}.gmA p{margin:6px 0}.gmA pre{background:#140404;border:1px solid var(--bd);padding:8px;border-radius:8px;overflow:auto}
+.gmA table{border-collapse:collapse;display:block;overflow-x:auto}.gmA td{border:1px solid var(--bd);padding:4px 8px}.gmA code{background:#140404;padding:1px 4px;border-radius:4px}
+.gmImg{max-width:100%;max-height:420px;border-radius:12px;display:block;margin-top:8px}.gmTh{height:70px;border-radius:8px;margin:6px 6px 0 0}
+.gmChip{display:inline-block;background:#3a1010;border-radius:10px;padding:3px 8px;margin:6px 6px 0 0;font-size:12px}
+.gmAct button,#gmAtt span{background:none;border:1px solid var(--bd);color:var(--tx);border-radius:12px;padding:3px 9px;font-size:12px;margin:4px 6px 0 0;cursor:pointer}
+#gmAtt{padding:0 10px}#gmAtt span{display:inline-block}
+#gmBar{display:flex;gap:6px;align-items:flex-end;padding:8px;border-top:1px solid var(--bd)}
+#gmIn{flex:1;resize:none;max-height:140px;border-radius:18px;padding:10px 14px;background:#1a0505;color:#fff;border:1px solid var(--bd);font:inherit}
+.gmB{border:0;background:var(--pn);color:var(--tx);width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;flex:none}.gmB.on{background:var(--ac);color:#fff}
+#gmLang{background:#1a0505;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:4px}
+@media(max-width:800px){#gmSide{position:absolute;z-index:5;top:0;bottom:0;left:0;transform:translateX(-102%);transition:.2s}#gmSide.open{transform:none;box-shadow:0 0 40px #000}}
+@media(min-width:801px){#gmMenu{display:none}}`;
+document.head.append(st);
+const aiBody=el('div',{}); aiBody.style.cssText='display:flex;flex:1;min-width:0;height:100%';
+aiBody.innerHTML='<div id="gmSide"><div style="padding:10px"><button class="btn green" id="gmNew" style="width:100%">＋ New chat</button></div><div id="gmList"></div></div><div id="gmMain"><div id="gmTop"><button class="gmB" id="gmMenu">☰</button><span id="gmTitle">Gemini</span><select id="gmLang"><option value="en-IN">English (India)</option><option value="hi-IN">हिन्दी</option><option value="mr-IN">मराठी</option><option value="en-US">English (US)</option></select></div><div id="gmLog"></div><div id="gmAtt"></div><div id="gmBar"><button class="gmB" id="gmClip" title="Attach files or photos">📎</button><textarea id="gmIn" rows="1" placeholder="Ask Gemini"></textarea><button class="gmB" id="gmMic" title="Voice typing">🎤</button><button class="gmB" id="gmImgT" title="Create an image">🖼</button><button class="gmB" id="gmSend" style="background:var(--ac);color:#fff">➤</button></div><input type="file" id="gmFile" multiple hidden accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.js,.ts,.py,.java,.c,.cpp,.html,.css,.xml,.yml,.yaml,.log,.sql"></div>';
+mkApp('aiApp','Gemini','✨','Gemini',aiBody);
+const gm={id:null,busy:0,att:[],img:0,title:'New chat',pdf:0,list:[]};
+const load=src=>new Promise((ok,no)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=no; document.head.append(s); });
+const readURL=f=>new Promise(ok=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.readAsDataURL(f); });
+const shrink=(src,max,q)=>new Promise(ok=>{ const im=new Image(); im.onload=()=>{ const k=Math.min(1,max/Math.max(im.width,im.height)), c=document.createElement('canvas'); c.width=Math.max(1,im.width*k); c.height=Math.max(1,im.height*k); const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(im,0,0,c.width,c.height); ok(c.toDataURL('image/jpeg',q)); }; im.src=src; });
+function welcome(){ G('gmLog').innerHTML=''; const d=document.createElement('div'); d.className='gmA'; d.innerHTML='<h3>Hello 👋</h3><p>Ask me anything. Attach files or photos with 📎, talk with 🎤, or tap 🖼 and describe an image to create it.</p>'; G('gmLog').append(d); }
+function setTitle(t){ gm.title=t||'New chat'; G('gmTitle').textContent=gm.title; }
+function bubble(m){
+  const d=document.createElement('div');
+  if(m.role==='user'){ d.className='gmU'; d.append(document.createTextNode(m.content||'')); (m.files||[]).forEach(f=>{ const c=document.createElement('div'); c.className='gmChip'; c.textContent='📎 '+f; d.append(c); }); (m.th||[]).forEach(u=>{ const i=new Image(); i.src=u; i.className='gmTh'; d.append(i); }); }
+  else { d.className='gmA'; d.innerHTML=aiMd(m.content||''); if(m.img){ const i=new Image(); i.src=m.img; i.className='gmImg'; d.append(i); } const a=document.createElement('div'); a.className='gmAct'; a.innerHTML='<button data-a="copy">📋 Copy</button><button data-a="pdf">📄 PDF</button>'+(m.img?'<button data-a="dl">💾 Image</button>':''); if(m.content||m.img) d.append(a); d._m=m; }
+  G('gmLog').append(d); G('gmLog').scrollTop=1e9; return d;
+}
+function latin(t){ return !/[^\u0000-\u024F\u2000-\u206F\u20A0-\u20CF]/.test(t); }
+async function pdf(text,title){
+  if(!latin(text)){ const w=window.open('','_blank'); if(!w) return alert('Allow pop-ups, then tap PDF again (choose "Save as PDF" in the print window).'); w.document.write('<html><head><meta charset="utf-8"><title>'+esc(title||'Gemini')+'</title><style>body{font:14px/1.6 sans-serif;max-width:800px;margin:24px auto;padding:0 16px}pre{background:#eee;padding:8px;white-space:pre-wrap}td{border:1px solid #999;padding:3px 6px}</style></head><body>'+aiMd(text)+'</body></html>'); w.document.close(); setTimeout(()=>w.print(),500); return; }
+  try{ if(!window.jspdf) await load('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'); }catch(e){ return alert('Could not load the PDF tool. Check your internet.'); }
+  const doc=new window.jspdf.jsPDF({unit:'pt',format:'a4'}), W=doc.internal.pageSize.getWidth()-100, H=doc.internal.pageSize.getHeight()-60; let y=60;
+  const put=(s,sz,b)=>{ doc.setFont('helvetica',b?'bold':'normal'); doc.setFontSize(sz); doc.splitTextToSize(s,W).forEach(l=>{ if(y>H){doc.addPage();y=60;} doc.text(l,50,y); y+=sz*1.4; }); };
+  put(title||'Gemini',18,1); y+=6;
+  text.split('\n').forEach(raw=>{ const l=raw.replace(/\*\*|__|`/g,''), h=/^(#{1,6})\s+(.*)/.exec(l); if(h){ y+=6; put(h[2],h[1].length<3?15:13,1); } else if(!l.trim()) y+=6; else put(l.replace(/^\s*[-*]\s+/,'• '),11,0); });
+  doc.save((title||'gemini').replace(/[^\w-]+/g,'_').slice(0,40)+'.pdf');
+}
+G('gmLog').addEventListener('click',e=>{ const b=e.target.closest('button[data-a]'); if(!b) return; const m=b.closest('.gmA')._m; if(!m) return; const a=b.dataset.a;
+  if(a==='copy'){ navigator.clipboard&&navigator.clipboard.writeText(m.content||''); b.textContent='✅ Copied'; }
+  else if(a==='pdf') pdf(m.content||'',gm.title);
+  else if(a==='dl'){ const l=document.createElement('a'); l.href=m.img; l.download='gemini-image.png'; l.click(); } });
+function renderList(){ const L=G('gmList'); L.innerHTML=''; gm.list.forEach(c=>{ const d=document.createElement('div'); d.className='gmCh'+(c.id===gm.id?' act':''); d.dataset.id=c.id; const s=document.createElement('span'); s.textContent=c.title||'New chat'; d.append(s); d.insertAdjacentHTML('beforeend','<i data-a="ren">✏</i><i data-a="del">🗑</i>'); L.append(d); }); }
+G('gmList').addEventListener('click',e=>{ const d=e.target.closest('.gmCh'); if(!d) return; const id=d.dataset.id, a=e.target.dataset.a;
+  if(a==='ren'){ const t=prompt('Rename chat',d.querySelector('span').textContent); if(t) socket.emit('ai_rename',{id,title:t}); }
+  else if(a==='del'){ if(confirm('Delete this chat?')){ socket.emit('ai_del',{id}); if(gm.id===id) newChat(); } }
+  else if(!gm.busy){ socket.emit('ai_open',{id}); G('gmSide').classList.remove('open'); } });
+function newChat(){ gm.id=null; setTitle('New chat'); welcome(); renderList(); G('gmSide').classList.remove('open'); }
+G('gmNew').onclick=()=>{ if(!gm.busy) newChat(); };
+G('gmMenu').onclick=()=>G('gmSide').classList.toggle('open');
+socket.on('ai_chats',l=>{ gm.list=l||[]; renderList(); });
+socket.on('ai_chat_data',c=>{ if(!c) return; gm.id=c.id; setTitle(c.title); G('gmLog').innerHTML=''; c.msgs.forEach(bubble); renderList(); });
+function showAtt(){ const A=G('gmAtt'); A.innerHTML=''; gm.att.forEach((a,i)=>{ const s=document.createElement('span'); s.textContent=(a.kind==='img'?'🖼 ':'📎 ')+a.name+' ✕'; s.onclick=()=>{ gm.att.splice(i,1); showAtt(); }; A.append(s); }); }
+G('gmClip').onclick=()=>G('gmFile').click();
+G('gmFile').onchange=async e=>{ const fs=[...e.target.files].slice(0,6); e.target.value='';
+  for(const f of fs){ try{
+    if(f.type.startsWith('image/')){ const u=await readURL(f); gm.att.push({kind:'img',name:f.name,data:await shrink(u,1280,.85),th:await shrink(u,200,.6)}); }
+    else if(/\.pdf$/i.test(f.name)){ if(!window.pdfjsLib) await load('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; const p=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise; let t=''; for(let i=1;i<=Math.min(p.numPages,60);i++){ t+=(await (await p.getPage(i)).getTextContent()).items.map(x=>x.str).join(' ')+'\n\n'; } if(!t.trim()) throw new Error('scanned'); gm.att.push({kind:'file',name:f.name,text:t}); }
+    else if(/\.docx$/i.test(f.name)){ if(!window.mammoth) await load('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'); gm.att.push({kind:'file',name:f.name,text:(await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()})).value}); }
+    else { if(f.size>3e6) throw new Error('big'); const t=await f.text(); if(t.includes('\u0000')) throw new Error('bin'); gm.att.push({kind:'file',name:f.name,text:t}); }
+  }catch(err){ alert(err.message==='scanned'?f.name+' has no text (scanned PDF). Attach it as photos instead.':'Could not read '+f.name+'. Supported: photos, PDF, Word (.docx) and text/code files.'); } }
+  showAtt(); };
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition; let rec=null;
+G('gmLang').value=localStorage.getItem('gmLang')||'en-IN'; G('gmLang').onchange=()=>localStorage.setItem('gmLang',G('gmLang').value);
+G('gmMic').onclick=()=>{ if(!SR) return alert('Voice typing needs Chrome (or another browser with speech recognition).'); if(rec){ rec.stop(); return; }
+  rec=new SR(); rec.lang=G('gmLang').value; rec.interimResults=true; rec.continuous=true; const base=G('gmIn').value; let fin='';
+  rec.onresult=e=>{ let tmp=''; for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i]; if(r.isFinal) fin+=r[0].transcript+' '; else tmp+=r[0].transcript; } G('gmIn').value=(base?base+' ':'')+fin+tmp; grow(); };
+  rec.onend=()=>{ rec=null; G('gmMic').classList.remove('on'); }; rec.onerror=e=>{ if(e.error==='not-allowed') alert('Allow microphone access for this site.'); };
+  rec.start(); G('gmMic').classList.add('on'); };
+G('gmImgT').onclick=()=>{ gm.img=!gm.img; G('gmImgT').classList.toggle('on',!!gm.img); G('gmIn').placeholder=gm.img?'Describe the image to create…':'Ask Gemini'; };
+const grow=()=>{ const t=G('gmIn'); t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,140)+'px'; };
+G('gmIn').addEventListener('input',grow);
+G('gmIn').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey&&innerWidth>800){ e.preventDefault(); send(); } });
+G('gmSend').onclick=send;
+function send(){ if(gm.busy) return; if(rec) rec.stop(); const t=G('gmIn').value.trim(); if(!t&&!gm.att.length) return;
+  const im=gm.att.filter(a=>a.kind==='img'), fl=gm.att.filter(a=>a.kind==='file');
+  if(!gm.id&&!G('gmLog').querySelector('.gmU')) G('gmLog').innerHTML='';
+  bubble({role:'user',content:t,files:gm.att.map(a=>a.name).filter((n,i)=>gm.att[i].kind==='file'),th:im.map(a=>a.th)});
+  gm.typ=bubble({role:'assistant',content:gm.img?'🎨 Creating image…':'…'}); gm.busy=1; gm.pdf=/\bpdf\b/i.test(t)&&/(make|create|generate|export|download|convert|save|give|write)/i.test(t);
+  socket.emit('ai_send',{id:gm.id,text:t,imgs:im.map(a=>a.data),th:im.map(a=>a.th),files:fl.map(a=>({name:a.name,text:a.text})),mode:gm.img?'image':''});
+  G('gmIn').value=''; grow(); gm.att=[]; showAtt(); if(gm.img) G('gmImgT').click(); }
+socket.on('ai_reply',async r=>{ gm.busy=0; if(gm.typ){ gm.typ.remove(); gm.typ=null; }
+  if(r.err){ const d=bubble({role:'assistant',content:'⚠️ '+r.err}); d.querySelector('.gmAct')&&d.querySelector('.gmAct').remove(); return; }
+  if(gm.id&&gm.id!==r.cid) return;
+  gm.id=r.cid; setTitle(r.title); bubble({role:'assistant',content:r.text,img:r.img});
+  if(r.img) socket.emit('ai_img_save',{id:r.cid,idx:r.idx,data:await shrink(r.img,900,.8)});
+  if(gm.pdf&&r.text&&latin(r.text)) pdf(r.text,r.title); });
+const _om=openModal; openModal=function(id){ _om(id); if(id==='aiApp'){ socket.emit('ai_list'); if(!G('gmLog').children.length) welcome(); } };
+welcome();
+})();
 
 /* ===== TV mode + QR / code sign-in ===== */
 (function(){
