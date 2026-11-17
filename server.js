@@ -612,7 +612,8 @@ async function callAI(text, imgs) {
     try {
       const content = [{ type: 'text', text }].concat((imgs || []).map(i => ({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64(i) } })));
       const r = await fetch(t.url, { method: 'POST', signal: AbortSignal.timeout(60000), headers: { 'content-type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) }, body: JSON.stringify({ model, max_tokens: 1500, temperature: 0.3, messages: [{ role: 'user', content: (imgs && imgs.length) ? content : text }] }) });
-      const j = await r.json(), out = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      const raw = await r.text(); let j; try { j = JSON.parse(raw); } catch (e) { console.error('AI bad reply from', t.url, 'status', r.status, JSON.stringify(raw.slice(0, 150))); continue; }
+      const out = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
       if (out) return out;
       console.error('AI:', t.url.slice(0, 40), model, JSON.stringify(j).slice(0, 200));
     } catch (e) { console.error('AI error:', e.message); }
