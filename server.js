@@ -35,7 +35,7 @@ async function initStorage() {
         catch (e) { if (i >= 3) throw e; console.log('MongoDB retry ' + i + '...'); await new Promise(r => setTimeout(r, 3000)); }
       }
       const d = client.db(process.env.MONGODB_DB || 'geminios');
-      M = { meta: d.collection('meta'), msgs: d.collection('messages'), files: d.collection('files') };
+      M = { meta: d.collection('meta'), msgs: d.collection('messages'), files: d.collection('files'), aichats: d.collection('aichats') };
       const meta = await M.meta.findOne({ _id: 'main' });
       if (meta) { delete meta._id; Object.assign(db, meta); }
       (await M.msgs.find().sort({ t: 1 }).toArray()).forEach(m => {
@@ -602,12 +602,16 @@ const battles = Object.create(null), battleOf = Object.create(null);
 const b64 = d => String(d).replace(/^data:image\/jpeg;base64,/, '');
 // AI for the drawing judge and the quiz. Order: your own local AI (LOCAL_AI_URL, any OpenAI-compatible server such as Ollama), then Groq (GROQ_API_KEY), else the built-in basics.
 const AI_ON = () => !!(process.env.LOCAL_AI_URL || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.CEREBRAS_API_KEY);
-async function callAI(text, imgs) {
+function aiProviders() {
   const tries = [];
   if (process.env.LOCAL_AI_URL) tries.push({ url: process.env.LOCAL_AI_URL.replace(/\/+$/, '') + '/chat/completions', key: process.env.LOCAL_AI_KEY || '', models: [process.env.LOCAL_AI_MODEL || 'llama3.2'] });
   if (process.env.CEREBRAS_API_KEY) tries.push({ url: 'https://api.cerebras.ai/v1/chat/completions', key: process.env.CEREBRAS_API_KEY, models: [process.env.CEREBRAS_MODEL || 'gpt-oss-120b'] });
   if (process.env.OPENROUTER_API_KEY) tries.push({ url: 'https://openrouter.ai/api/v1/chat/completions', key: process.env.OPENROUTER_API_KEY, models: [process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free', 'openrouter/free'] });
   if (process.env.GROQ_API_KEY) tries.push({ url: 'https://api.groq.com/openai/v1/chat/completions', key: process.env.GROQ_API_KEY, models: [process.env.GROQ_MODEL, 'meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'].filter(Boolean) });
+  return tries;
+}
+async function callAI(text, imgs) {
+  const tries = aiProviders();
   for (const t of tries) for (const model of t.models) {
     try {
       const content = [{ type: 'text', text }].concat((imgs || []).map(i => ({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64(i) } })));
@@ -631,6 +635,66 @@ async function callChat(hist) {
   }
   const flat = hist.map(m => (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content).join('\n');
   return callAI('You are a helpful assistant called Claude. Continue this chat with one concise reply.\n' + flat + '\nAssistant:');
+}
+// ================= Gemini chat: many saved chats, files/images in, images out =================
+const aiUse = Object.create(null);
+const GM_SYS = 'You are Gemini, a friendly and capable AI assistant inside Gemini OS. Reply in the language the user writes in. Use Markdown (headings, lists, tables, code blocks) when it helps. Give complete, detailed, well-organised answers when the question needs depth (essays, explanations, code and plans can be long). Answer simple questions briefly. If the user asks you to make it short, shorter, brief, or a summary, reply briefly and stay brief until they ask for more. Use the whole conversation as context, including the text of any attached files. When asked to create a PDF or a document, just write the full content in your reply: the app turns your reply into a PDF file automatically, so never say you cannot create PDFs.';
+const AIC = {
+  async list(u) {
+    if (M) return (await M.aichats.find({ u }, { projection: { msgs: 0 } }).sort({ t: -1 }).limit(3000).toArray()).map(c => ({ id: c._id, title: c.title, t: c.t }));
+    return Object.values(db.aichats || {}).filter(c => c.u === u).sort((a, b) => b.t - a.t).map(c => ({ id: c.id, title: c.title, t: c.t }));
+  },
+  async get(u, id) {
+    if (M) { const c = await M.aichats.findOne({ _id: id, u }); return c && { id: c._id, u: c.u, title: c.title, t: c.t, msgs: c.msgs || [] }; }
+    const c = (db.aichats || {})[id]; return c && c.u === u ? c : null;
+  },
+  async put(c) {
+    c.t = Date.now();
+    if (M) await M.aichats.replaceOne({ _id: c.id }, { ...c, _id: c.id }, { upsert: true });
+    else { (db.aichats = db.aichats || {})[c.id] = c; pMeta(); }
+  },
+  async del(u, id) {
+    if (M) await M.aichats.deleteOne({ _id: id, u });
+    else { const c = (db.aichats || {})[id]; if (c && c.u === u) { delete db.aichats[id]; pMeta(); } }
+  }
+};
+async function callLLM(system, hist, imgs, maxTokens) {
+  for (const t of aiProviders()) for (const model of t.models) {
+    try {
+      const msgs = [{ role: 'system', content: system }].concat(hist.map((m, i) => (i === hist.length - 1 && imgs.length)
+        ? { role: 'user', content: [{ type: 'text', text: m.content || 'Look at the attached image(s).' }].concat(imgs.map(u => ({ type: 'image_url', image_url: { url: u } }))) } : m));
+      const r = await fetch(t.url, { method: 'POST', signal: AbortSignal.timeout(120000), headers: { 'content-type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) }, body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.7, messages: msgs }) });
+      const raw = await r.text(); let j; try { j = JSON.parse(raw); } catch (e) { console.error('AI bad reply from', t.url, 'status', r.status, JSON.stringify(raw.slice(0, 150))); continue; }
+      const out = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      if (out) return out;
+      console.error('AI:', t.url.slice(0, 40), model, JSON.stringify(j).slice(0, 250));
+    } catch (e) { console.error('AI error:', e.message); }
+  }
+  return null;
+}
+// Nano Banana (Gemini image models) through your Gemini key; falls back to a free image service
+async function genImage(prompt, ref) {
+  const key = process.env.GEMINI_API_KEY || (/generativelanguage/.test(process.env.LOCAL_AI_URL || '') ? process.env.LOCAL_AI_KEY : '');
+  if (key) {
+    const model = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
+    try {
+      const parts = [{ text: prompt }];
+      const m = ref && /^data:(image\/\w+);base64,(.+)$/.exec(ref); if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', { method: 'POST', signal: AbortSignal.timeout(120000), headers: { 'content-type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE', 'TEXT'] } }) });
+      const j = await r.json();
+      const ps = (j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
+      const im = ps.find(p => p.inlineData || p.inline_data);
+      if (im) { const d = im.inlineData || im.inline_data; return { img: 'data:' + (d.mimeType || d.mime_type || 'image/png') + ';base64,' + d.data, note: ps.filter(p => p.text).map(p => p.text).join('') }; }
+      console.error('IMG:', model, JSON.stringify(j).slice(0, 300));
+    } catch (e) { console.error('IMG error:', e.message); }
+  }
+  try {
+    const r = await fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt.slice(0, 500)) + '?width=1024&height=1024&nologo=true', { signal: AbortSignal.timeout(90000) });
+    const ct = r.headers.get('content-type') || '';
+    if (r.ok && ct.startsWith('image/')) return { img: 'data:' + ct.split(';')[0] + ';base64,' + Buffer.from(await r.arrayBuffer()).toString('base64'), note: '' };
+    console.error('IMG fallback status', r.status);
+  } catch (e) { console.error('IMG fallback error:', e.message); }
+  return null;
 }
 const DRAW_DAILY = 100; // painting game: max coins per player per day, then it stops paying
 const recentPrompts = Object.create(null);
@@ -1111,6 +1175,63 @@ io.on('connection', (socket) => {
     if (!hist.length) return;
     const out = await callChat(hist);
     socket.emit('ai_reply', out ? { text: String(out).slice(0, 4000) } : { err: AI_ON() || process.env.ANTHROPIC_API_KEY ? 'The AI is set up but did not answer (busy, wrong model name, or bad key). Owner: check Render Logs for lines starting with "AI:".' : 'The AI is not set up on this server yet. The owner must set CEREBRAS_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY or ANTHROPIC_API_KEY.' });
+  });
+
+  // ---------- Gemini chat (saved chats per user) ----------
+  const aiErr = (cid, err) => socket.emit('ai_reply', { cid, err });
+  socket.on('ai_list', async () => { if (me) socket.emit('ai_chats', await AIC.list(me).catch(() => [])); });
+  socket.on('ai_open', async ({ id } = {}) => { if (!me) return; const c = await AIC.get(me, String(id)).catch(() => null); socket.emit('ai_chat_data', c && { id: c.id, title: c.title, msgs: c.msgs.map(({ ftxt, ...m }) => m) }); });
+  socket.on('ai_rename', async ({ id, title } = {}) => { if (!me) return; const c = await AIC.get(me, String(id)); if (c) { c.title = String(title || '').trim().slice(0, 60) || c.title; await AIC.put(c); socket.emit('ai_chats', await AIC.list(me)); } });
+  socket.on('ai_del', async ({ id } = {}) => { if (!me) return; await AIC.del(me, String(id)); socket.emit('ai_chats', await AIC.list(me)); });
+  socket.on('ai_img_save', async ({ id, idx, data } = {}) => {
+    if (!me || typeof data !== 'string' || data.length > 450000 || !/^data:image\//.test(data)) return;
+    const c = await AIC.get(me, String(id)), m = c && c.msgs[idx | 0];
+    if (m && m.role === 'assistant' && !m.img) { m.img = data; await AIC.put(c); }
+  });
+  socket.on('ai_send', async (d = {}) => {
+    if (!me) return;
+    const now = Date.now(); if (socket._aiT && now - socket._aiT < 1500) return aiErr(d.id, 'Slow down a little');
+    socket._aiT = now;
+    const text = String(d.text || '').trim().slice(0, 20000);
+    const okImg = (u, max) => typeof u === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(u) && u.length < max;
+    const imgs = (Array.isArray(d.imgs) ? d.imgs : []).slice(0, 4).filter(u => okImg(u, 6e6));
+    const th = (Array.isArray(d.th) ? d.th : []).slice(0, 4).filter(u => okImg(u, 60000));
+    const files = (Array.isArray(d.files) ? d.files : []).slice(0, 6).map(f => ({ name: String((f && f.name) || 'file').slice(0, 80), text: String((f && f.text) || '').slice(0, 60000) }));
+    if (!text && !imgs.length && !files.length) return;
+    const day = new Date().toISOString().slice(0, 10) + me; aiUse[day] = (aiUse[day] || 0) + 1;
+    if (aiUse[day] > (+process.env.AI_DAILY || 300)) return aiErr(d.id, 'Daily limit reached. Try again tomorrow.');
+    let chat = d.id ? await AIC.get(me, String(d.id)) : null;
+    const isNew = !chat;
+    if (!chat) chat = { id: uid(), u: me, title: '', msgs: [], t: Date.now() };
+    chat.msgs.push({ role: 'user', content: text, files: files.map(f => f.name), ftxt: files.map(f => '[File: ' + f.name + ']\n' + f.text).join('\n\n'), th });
+    if (!chat.title) chat.title = (text || (files[0] && files[0].name) || 'New chat').replace(/\s+/g, ' ').slice(0, 40);
+    const wantImg = d.mode === 'image' || /\b(generate|create|make|draw|design|produce)\b[^.\n]{0,25}\b(image|picture|photo|logo|poster|wallpaper|illustration|drawing)\b/i.test(text);
+    let reply = null;
+    if (wantImg && text) {
+      const g = await genImage(text, imgs[0]);
+      if (g) reply = { text: g.note || '', img: g.img };
+    } else {
+      const hist = []; let total = 0;
+      for (let i = chat.msgs.length - 1; i >= 0 && hist.length < 40; i--) {
+        const m = chat.msgs[i];
+        const content = m.role === 'user' ? (m.content + (m.ftxt ? '\n\n' + m.ftxt : '')).trim() : (m.content || (m.img ? '[Generated an image]' : ''));
+        if (!content && !(i === chat.msgs.length - 1 && imgs.length)) continue;
+        total += content.length; if (total > 150000 && hist.length) break;
+        hist.unshift({ role: m.role === 'assistant' ? 'assistant' : 'user', content });
+      }
+      while (hist.length && hist[0].role !== 'user') hist.shift();
+      const out = await callLLM(GM_SYS, hist, imgs, 8192);
+      if (out) reply = { text: String(out) };
+    }
+    if (!reply) {
+      chat.msgs.pop();
+      if (chat.msgs.length) await AIC.put(chat);
+      return aiErr(isNew ? null : chat.id, wantImg && text ? 'Could not create the image (the image service is busy or not enabled for your key). Check Render Logs for lines starting with "IMG".' : (AI_ON() ? 'The AI is set up but did not answer (busy, wrong model name, or bad key). Owner: check Render Logs for lines starting with "AI:".' : 'The AI is not set up on this server yet.'));
+    }
+    chat.msgs.push({ role: 'assistant', content: reply.text, img: '' });
+    await AIC.put(chat);
+    socket.emit('ai_reply', { cid: chat.id, title: chat.title, text: reply.text, img: reply.img || '', idx: chat.msgs.length - 1 });
+    socket.emit('ai_chats', await AIC.list(me).catch(() => []));
   });
 
   // ---------- Profile phone number + dial pad ----------
