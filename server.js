@@ -601,15 +601,17 @@ const DB_PROMPTS = [
 const battles = Object.create(null), battleOf = Object.create(null);
 const b64 = d => String(d).replace(/^data:image\/jpeg;base64,/, '');
 // AI for the drawing judge and the quiz. Order: your own local AI (LOCAL_AI_URL, any OpenAI-compatible server such as Ollama), then Groq (GROQ_API_KEY), else the built-in basics.
-const AI_ON = () => !!(process.env.LOCAL_AI_URL || process.env.GROQ_API_KEY);
+const AI_ON = () => !!(process.env.LOCAL_AI_URL || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.CEREBRAS_API_KEY);
 async function callAI(text, imgs) {
   const tries = [];
   if (process.env.LOCAL_AI_URL) tries.push({ url: process.env.LOCAL_AI_URL.replace(/\/+$/, '') + '/chat/completions', key: process.env.LOCAL_AI_KEY || '', models: [process.env.LOCAL_AI_MODEL || 'llama3.2'] });
+  if (process.env.CEREBRAS_API_KEY) tries.push({ url: 'https://api.cerebras.ai/v1/chat/completions', key: process.env.CEREBRAS_API_KEY, models: [process.env.CEREBRAS_MODEL || 'gpt-oss-120b'] });
+  if (process.env.OPENROUTER_API_KEY) tries.push({ url: 'https://openrouter.ai/api/v1/chat/completions', key: process.env.OPENROUTER_API_KEY, models: [process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free', 'openrouter/free'] });
   if (process.env.GROQ_API_KEY) tries.push({ url: 'https://api.groq.com/openai/v1/chat/completions', key: process.env.GROQ_API_KEY, models: [process.env.GROQ_MODEL, 'meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'].filter(Boolean) });
   for (const t of tries) for (const model of t.models) {
     try {
       const content = [{ type: 'text', text }].concat((imgs || []).map(i => ({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64(i) } })));
-      const r = await fetch(t.url, { method: 'POST', signal: AbortSignal.timeout(60000), headers: { 'content-type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) }, body: JSON.stringify({ model, max_tokens: 400, temperature: 0.3, messages: [{ role: 'user', content: (imgs && imgs.length) ? content : text }] }) });
+      const r = await fetch(t.url, { method: 'POST', signal: AbortSignal.timeout(60000), headers: { 'content-type': 'application/json', ...(t.key ? { Authorization: 'Bearer ' + t.key } : {}) }, body: JSON.stringify({ model, max_tokens: 1500, temperature: 0.3, messages: [{ role: 'user', content: (imgs && imgs.length) ? content : text }] }) });
       const j = await r.json(), out = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
       if (out) return out;
       console.error('AI:', t.url.slice(0, 40), model, JSON.stringify(j).slice(0, 200));
@@ -1107,7 +1109,7 @@ io.on('connection', (socket) => {
     while (hist.length && hist[0].role !== 'user') hist.shift();
     if (!hist.length) return;
     const out = await callChat(hist);
-    socket.emit('ai_reply', out ? { text: String(out).slice(0, 4000) } : { err: 'The AI is not set up on this server yet. The owner must set ANTHROPIC_API_KEY (or GROQ_API_KEY).' });
+    socket.emit('ai_reply', out ? { text: String(out).slice(0, 4000) } : { err: AI_ON() || process.env.ANTHROPIC_API_KEY ? 'The AI is set up but did not answer (busy, wrong model name, or bad key). Owner: check Render Logs for lines starting with "AI:".' : 'The AI is not set up on this server yet. The owner must set CEREBRAS_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY or ANTHROPIC_API_KEY.' });
   });
 
   // ---------- Profile phone number + dial pad ----------
