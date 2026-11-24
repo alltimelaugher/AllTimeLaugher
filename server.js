@@ -1247,6 +1247,32 @@ io.on('connection', (socket) => {
     socket.emit('ai_chats', await AIC.list(me).catch(() => []));
   });
 
+  // ---------- AI Studio: Education / Creativity / Coding / Images (uses your free AI keys) ----------
+  const ST_SYS = {
+    edu: 'You are a patient, encouraging teacher. Explain step by step in simple language with short examples, then check understanding with one quick question. For maths and science show the working. Reply in the language the user writes in. Use Markdown.',
+    creative: 'You are a creative writing partner for stories, poems, song ideas, jokes, names, scripts and brainstorming. Be imaginative and vivid, and keep everything suitable for all ages. Reply in the language the user writes in. Use Markdown.',
+    voice: 'You are a friendly voice assistant like Google Assistant. Your answer will be read aloud, so reply in one to three short, natural spoken sentences. Plain text only: no Markdown, no lists, no emojis, no links. Reply in the language the user speaks. If you do not know something, say so briefly.',
+    code: 'You are an expert programmer and code reviewer. Give correct, working, well-commented code in fenced Markdown code blocks, explain briefly what it does and how to run it, and point out bugs or security problems you notice. Reply in the language the user writes in.'
+  };
+  socket.on('studio_ask', async (d = {}) => {
+    if (!me) return;
+    const mode = ['edu', 'creative', 'code', 'image', 'voice'].includes(d.mode) ? d.mode : 'edu';
+    const out = r => socket.emit('studio_reply', Object.assign({ mode }, r));
+    const now = Date.now(); if (socket._stT && now - socket._stT < 2000) return out({ err: 'Slow down a little' }); socket._stT = now;
+    const text = String(d.text || '').trim().slice(0, 6000); if (!text) return;
+    const day = 's' + new Date().toISOString().slice(0, 10) + me; aiUse[day] = (aiUse[day] || 0) + 1;
+    if (aiUse[day] > (+process.env.AI_DAILY || 300)) return out({ err: 'Daily limit reached. Try again tomorrow.' });
+    if (mode === 'image') {
+      const g = await genImage(text, null);
+      return out(g ? { text: '', img: g.img } : { err: 'Could not create the image right now. Try a shorter description, or try again in a minute.' });
+    }
+    const hist = (Array.isArray(d.hist) ? d.hist : []).slice(-10).map(m => ({ role: m && m.role === 'assistant' ? 'assistant' : 'user', content: String((m && m.content) || '').slice(0, 4000) })).filter(m => m.content);
+    hist.push({ role: 'user', content: text });
+    while (hist.length && hist[0].role !== 'user') hist.shift();
+    const reply = await callLLM(ST_SYS[mode], hist, [], mode === 'voice' ? 400 : 4096);
+    out(reply ? { text: String(reply) } : { err: AI_ON() ? 'The AI did not answer (busy or a wrong key). Try again in a moment.' : 'The AI is not set up on this server yet.' });
+  });
+
   // ---------- Profile phone number + dial pad ----------
   const dialOf = x => String(x || '').replace(/[^\d]/g, '');
   const dialFind = d => d && Object.keys(db.profiles).find(n => db.profiles[n] && db.profiles[n].dial === d);
@@ -1547,7 +1573,7 @@ io.on('connection', (socket) => {
   });
 
   // ---------- Coins & leaderboard ----------
-  const GAME_COINS = { xo: 8, arena: 25, doom: 25, gd: 40, snake: 10, g2048: 30, ludo: 20, memory: 15, c4: 20, flap: 20, snl: 20, race: 20, maze: 20 }; // coins for a win in the games that run on the player's device
+  const GAME_COINS = { xo: 8, arena: 25, doom: 25, gd: 40, snake: 10, g2048: 30, ludo: 20, memory: 15, c4: 20, flap: 20, snl: 20, race: 20, maze: 20, hill: 20 }; // coins for a win in the games that run on the player's device
   const lastGR = {};
   socket.on('game_reward', ({ game, win, score, lvl } = {}) => {
     if (!me || !hasOwn(GAME_COINS, game)) return;
