@@ -2573,7 +2573,7 @@ function mkApp(id,title,icon,label,body){
   $('side').append(el('button',{class:'nav more',onclick:()=>openModal(id)},icon,el('span',{},label)));
   const tiles=document.querySelector('.tiles'); tiles.insertBefore(el('div',{class:'tile-app',onclick:()=>openModal(id)},el('i',{},icon),label),tiles.lastElementChild);
 }
-const GAMEIDS=['ludApp','snakeApp','g48App','c4App','flApp','mmApp','slApp','rcApp','mzApp','dbApp','quizApp'], GAMELIST=[];
+const GAMEIDS=['ludApp','snakeApp','g48App','c4App','flApp','mmApp','slApp','rcApp','mzApp','hcApp','dbApp','quizApp'], GAMELIST=[];
 
 /* ---------- 1) (multitasking removed) apps open one at a time, full screen, like the original ---------- */
 const _openModal=openModal;
@@ -2942,6 +2942,7 @@ const _omL=openModal; openModal=function(id){ _omL(id); if(id==='ludApp'&&!LUD&&
 const G=id=>document.getElementById(id);
 const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 //START_MD
+window.aiMd=aiMd;
 function aiMd(s){
   const bl=[]; s=String(s).replace(/```\w*\n?([\s\S]*?)```/g,(m,c)=>{ bl.push('<pre><code>'+esc(c)+'</code></pre>'); return '\u0001'+(bl.length-1)+'\u0001'; });
   const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
@@ -3359,7 +3360,166 @@ function mzDraw(){ const M=MZ,c=$('mzCv').getContext('2d'),W=480,H=270,FOV=1.05,
   c.fillStyle='#000a'; c.fillRect(0,0,W,20); c.fillStyle='#e53935'; c.fillRect(6,5,Math.max(0,M.hp)*1.2,10); c.strokeStyle='#fff'; c.strokeRect(6,5,120,10); c.fillStyle='#fff'; c.font='12px sans-serif'; c.fillText(['Easy','Medium','Hard'][MZS.diff]+'   ⏱ '+Math.round(((M.done?M.t0+(M.time||0)*1000:performance.now())-M.t0)/1000)+'s',140,15);
   if(M.done){ c.fillStyle='#000b'; c.fillRect(0,100,W,70); c.fillStyle='#fff'; c.font='bold 22px sans-serif'; c.textAlign='center'; c.fillText(M.done===1?'🎉 Escaped in '+M.time+'s!':'💀 The ghosts got you',W/2,135); c.font='13px sans-serif'; c.fillText('Press ▶ New maze to play again',W/2,157); c.textAlign='left'; } }
 
-const _omG=openModal; openModal=function(id){ _omG(id); if(id==='slApp'&&!SL) slNew(); if(id==='mzApp'){ if(!MZ) mzNew(); else mzLoop(); } if(id==='rcApp'){ if(!RC) rcNew('endless'); else rcLoop(); } };
+/* Hill Climb Racing: 2D physics car on endless hills, fuel cans, coins */
+const hcBody=el('div',{style:{textAlign:'center'}});
+hcBody.innerHTML='<div><span class="lchip on" data-d="0">Easy</span><span class="lchip" data-d="1">Medium</span><span class="lchip" data-d="2">Hard</span> <button class="btn green sm" id="hcGo">▶ Start</button></div><div class="gwrap"><canvas id="hcCv" width="480" height="270"></canvas><div class="rcArr" id="hcB" style="left:12px;font-size:15px;font-weight:bold">BRAKE</div><div class="rcArr" id="hcG" style="right:12px;font-size:20px;font-weight:bold">GAS</div></div><small style="color:#888">Hold GAS to drive and BRAKE to slow down. In the air, GAS tilts the car back and BRAKE tilts it forward. Grab ⛽ fuel cans and 🪙 coins, and do not land on your head. Keyboard: → or D = gas, ← or A = brake. Tap ⛶ for full screen.</small>';
+mkApp('hcApp','Hill Climb Racing','🚙','Hill Climb',hcBody);
+const HCD=[{amp:.75,fuel:3.0,gap:620},{amp:1,fuel:3.4,gap:760},{amp:1.2,fuel:3.8,gap:900}], HCS={diff:0};
+let HC=null;
+const hcGround=(x,amp)=>{ const k=(.25+.75*Math.min(1,x/6000))*amp*(1+Math.min(.7,x/25000)), fb=Math.min(1,Math.max(0,(x-250)/350)), f=fb*fb*(3-2*fb);
+  return 180+f*k*(34*Math.sin(x/260)+16*Math.sin(x/120+1.3)+6*Math.sin(x/55+.5)); };
+chipRow(hcBody,'[data-d]',c=>{ HCS.diff=+c.dataset.d; hcNew(); }); hcBody.querySelector('#hcGo').addEventListener('click',()=>hcNew());
+[['#hcB','br'],['#hcG','gas']].forEach(([q,k])=>{ const b=hcBody.querySelector(q); const on=e=>{ e.preventDefault(); try{ b.setPointerCapture(e.pointerId); }catch(x){} if(HC) HC[k]=1; b.classList.add('on'); }; const off=()=>{ if(HC) HC[k]=0; b.classList.remove('on'); };
+  b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off); b.addEventListener('pointercancel',off); b.addEventListener('lostpointercapture',off); b.addEventListener('contextmenu',e=>e.preventDefault()); });
+const hcKeys={ArrowRight:'gas',d:'gas',ArrowUp:'gas',ArrowLeft:'br',a:'br',ArrowDown:'br'};
+document.addEventListener('keydown',e=>{ if(HC&&$('hcApp').style.display==='flex'&&hcKeys[e.key]){ HC[hcKeys[e.key]]=1; if(e.key.startsWith('Arrow')) e.preventDefault(); } });
+document.addEventListener('keyup',e=>{ if(HC&&hcKeys[e.key]) HC[hcKeys[e.key]]=0; });
+function hcNew(){ const D=HCD[HCS.diff], x0=80, gy=hcGround(x0,D.amp);
+  HC={D,x:x0,y:gy-18,a:0,vx:0,vy:0,w:0,gas:0,br:0,fuel:100,coins:0,dist:0,over:0,run:0,wr:0,cam:0,camY:0,coinsL:[],cans:[],nc:300,nf:D.gap*.6,still:0,air:0,t:0,msg:''};
+  HC.camY=Math.max(-120,Math.min(40,HC.y-150)); hcLoop(); }
+function hcLoop(){ const R=HC; if(!R||R.over||R.run) return; R.run=1; R.last=performance.now();
+  const step=now=>{ if(HC!==R||R.over||$('hcApp').style.display!=='flex'){ R.run=0; return; } const dt=Math.min(.04,(now-R.last)/1000); R.last=now; hcStep(R,dt); hcDraw(); if(!R.over) requestAnimationFrame(step); else R.run=0; };
+  requestAnimationFrame(step); }
+function hcSpawn(R){ const amp=R.D.amp;
+  while(R.nc<R.x+700){ const n=4+Math.floor(Math.random()*3); for(let i=0;i<n;i++){ const cx=R.nc+i*30; R.coinsL.push({x:cx,y:hcGround(cx,amp)-28-Math.sin(i/(n-1)*Math.PI)*16}); } R.nc+=n*30+140+Math.random()*180; }
+  while(R.nf<R.x+700){ R.cans.push({x:R.nf,y:hcGround(R.nf,amp)-14}); R.nf+=R.D.gap*(.8+Math.random()*.4); } }
+function hcStep(R,dt){ const amp=R.D.amp, G=900, K=190, C=22, MU=1.3, FD=210, LW=22, WY=10, WR=8, I=520, SUB=6, h=dt/SUB;
+  R.t+=dt; hcSpawn(R); let onG=0;
+  for(let s=0;s<SUB;s++){
+    const ca=Math.cos(R.a), sa=Math.sin(R.a); let fx=0, fy=G, tq=0; onG=0;
+    for(const lx of [-LW,LW]){
+      const rx=lx*ca-WY*sa, ry=lx*sa+WY*ca, wx=R.x+rx, wy=R.y+ry, gy=hcGround(wx,amp), p=wy+WR-gy; if(p<=0) continue; onG++;
+      const sl=(hcGround(wx+1,amp)-hcGround(wx-1,amp))/2, m=Math.sqrt(1+sl*sl), nx=sl/m, ny=-1/m, tx=1/m, ty=sl/m;
+      const vwx=R.vx-R.w*ry, vwy=R.vy+R.w*rx, vn=vwx*nx+vwy*ny, vt=vwx*tx+vwy*ty;
+      let Fn=Math.max(0,K*Math.min(p,14)-C*vn), Ft=0;
+      if(R.fuel>0&&R.gas) Ft+=FD; if(R.br) Ft-=Math.max(-300,Math.min(300,vt*6));
+      Ft-=vt*.5; const lim=MU*Fn; Ft=Math.max(-lim,Math.min(lim,Ft));
+      const Fx=Fn*nx+Ft*tx, Fy=Fn*ny+Ft*ty; fx+=Fx; fy+=Fy; tq+=rx*Fy-ry*Fx;
+      if(p>14){ R.y-=(p-14)*.5; if(vn<0){ R.vx-=vn*nx*.5; R.vy-=vn*ny*.5; } }
+      R.wr+=vt/WR*h*.5; }
+    if(!onG){ if(R.fuel>0&&R.gas) tq-=4200; if(R.br) tq+=4200; fx-=R.vx*.05; }
+    else fx-=R.vx*.9;
+    R.vx+=fx*h; R.vy+=fy*h; R.w+=tq/I*h; R.w*=1-1.4*h; R.vx=Math.max(-300,Math.min(700,R.vx)); R.w=Math.max(-8,Math.min(8,R.w));
+    R.x+=R.vx*h; R.y+=R.vy*h; R.a+=R.w*h;
+  }
+  R.air=onG?0:R.air+dt;
+  const ca=Math.cos(R.a), sa=Math.sin(R.a), hx=R.x+(-4)*ca-(-19)*sa, hy=R.y+(-4)*sa+(-19)*ca;
+  if(hy>hcGround(hx,amp)-3){ R.over=1; R.msg='💥 You crashed!'; }
+  R.fuel-=dt*(R.gas?R.D.fuel:.6); if(R.fuel<=0){ R.fuel=0; if(Math.abs(R.vx)<10&&onG) R.still+=dt; else R.still=0; if(R.still>1.2){ R.over=1; R.msg='⛽ Out of fuel!'; } }
+  R.dist=Math.max(R.dist,Math.floor((R.x-80)/12));
+  R.coinsL=R.coinsL.filter(c=>{ if(Math.hypot(c.x-R.x,c.y-R.y)<20){ R.coins++; return false; } return c.x>R.x-300; });
+  R.cans=R.cans.filter(c=>{ if(Math.hypot(c.x-R.x,c.y-R.y)<24){ R.fuel=Math.min(100,R.fuel+45); return false; } return c.x>R.x-300; });
+  if(R.over) hcEnd(); }
+function hcEnd(){ const R=HC; hcDraw(); if(R.dist>=100) gRew('hill',R.dist); }
+function hcDraw(){ const R=HC, c=$('hcCv').getContext('2d'), W=480, H=270, amp=R.D.amp;
+  const camX=R.x-150; R.camY+=(Math.max(-120,Math.min(40,R.y-150))-R.camY)*.08; const cy=R.camY;
+  const g=c.createLinearGradient(0,0,0,H); g.addColorStop(0,'#4fc3f7'); g.addColorStop(1,'#e1f5fe'); c.fillStyle=g; c.fillRect(0,0,W,H);
+  c.fillStyle='#fff'; for(let i=0;i<4;i++){ const cx=((i*190-camX*.1)%(W+120)+W+120)%(W+120)-60; c.beginPath(); c.arc(cx,40+i*14,16,0,7); c.arc(cx+18,44+i*14,12,0,7); c.arc(cx-16,46+i*14,11,0,7); c.fill(); }
+  c.fillStyle='#81c784'; c.beginPath(); c.moveTo(0,H); for(let x=0;x<=W;x+=8){ const wx=x+camX*.35; c.lineTo(x,150-cy*.3+Math.sin(wx/170)*28+Math.sin(wx/63)*9); } c.lineTo(W,H); c.fill();
+  c.beginPath(); c.moveTo(0,H); for(let x=0;x<=W+4;x+=4) c.lineTo(x,hcGround(x+camX,amp)-cy); c.lineTo(W+4,H); c.closePath(); c.fillStyle='#6d4c2a'; c.fill();
+  c.beginPath(); for(let x=0;x<=W+4;x+=4){ const y=hcGround(x+camX,amp)-cy; if(x) c.lineTo(x,y); else c.moveTo(x,y); } c.strokeStyle='#4caf50'; c.lineWidth=6; c.lineJoin='round'; c.stroke();
+  R.coinsL.forEach(o=>{ const sx=o.x-camX; if(sx<-20||sx>W+20) return; c.fillStyle='#ffd600'; c.strokeStyle='#ff6f00'; c.lineWidth=2; c.beginPath(); c.arc(sx,o.y-cy,7,0,7); c.fill(); c.stroke(); });
+  R.cans.forEach(o=>{ const sx=o.x-camX; if(sx<-20||sx>W+20) return; const y=o.y-cy; c.fillStyle='#e53935'; c.fillRect(sx-8,y-10,16,20); c.fillStyle='#fff'; c.fillRect(sx-5,y-6,10,6); c.fillStyle='#b71c1c'; c.fillRect(sx-4,y-14,8,5); });
+  const ca=Math.cos(R.a), sa=Math.sin(R.a);
+  c.save(); c.translate(R.x-camX,R.y-cy); c.rotate(R.a);
+  c.fillStyle='#e53935'; c.fillRect(-26,-8,52,15); c.fillStyle='#b71c1c'; c.fillRect(-26,3,52,4);
+  c.fillStyle='#90caf9'; c.fillRect(-9,-18,20,11); c.fillStyle='#ffcc80'; c.beginPath(); c.arc(-2,-21,5,0,7); c.fill(); c.fillStyle='#fdd835'; c.fillRect(-7,-25,10,3);
+  c.restore();
+  for(const lx of [-22,22]){ const wx=R.x+lx*ca-10*sa-camX, wy=R.y+lx*sa+10*ca-cy; c.fillStyle='#212121'; c.beginPath(); c.arc(wx,wy,8,0,7); c.fill(); c.fillStyle='#bdbdbd'; c.beginPath(); c.arc(wx,wy,4,0,7); c.fill(); c.strokeStyle='#212121'; c.lineWidth=1.5; c.beginPath(); c.moveTo(wx,wy); c.lineTo(wx+Math.cos(R.wr)*4,wy+Math.sin(R.wr)*4); c.stroke(); }
+  c.fillStyle='#000a'; c.fillRect(0,0,W,22); c.fillStyle='#fff'; c.font='13px sans-serif'; c.fillText(R.dist+' m   🪙 '+R.coins,8,15);
+  c.fillStyle='#333'; c.fillRect(W-128,5,120,12); c.fillStyle=R.fuel<25?'#ff1744':'#ffb300'; c.fillRect(W-128,5,Math.max(0,R.fuel)*1.2,12); c.strokeStyle='#fff'; c.lineWidth=1; c.strokeRect(W-128,5,120,12); c.fillStyle='#fff'; c.font='10px sans-serif'; c.fillText('⛽ FUEL',W-122,15);
+  if(R.over){ c.fillStyle='#000b'; c.fillRect(0,95,W,80); c.fillStyle='#fff'; c.font='bold 22px sans-serif'; c.textAlign='center'; c.fillText(R.msg+'  '+R.dist+' m  🪙 '+R.coins,W/2,128); c.font='13px sans-serif'; c.fillText('Press ▶ Start to try again',W/2,154); c.textAlign='left'; } }
+
+/* AI Studio: Education / Creativity / Coding / Images / Video (free AI keys on the server) */
+try{
+const stBody=el('div',{});
+stBody.innerHTML='<div id="stTabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div><div id="stHint" style="color:#aaa;font-size:13px;margin-bottom:6px"></div><div id="stLog" style="min-height:240px;max-height:55vh;overflow:auto;padding:4px"></div><div id="stBar" style="display:flex;gap:6px;margin-top:8px"><textarea id="stIn" rows="2" style="flex:1;resize:vertical"></textarea><button class="btn green" id="stSend">Send</button></div><div id="stVid" style="display:none"></div>';
+mkApp('stApp','AI Studio','🧩','AI Studio',stBody);
+const ST=[
+ {k:'edu',i:'🎓',n:'Education',h:'Your personal teacher. Ask about any school or learning topic and get step-by-step answers.',ph:'e.g. Explain photosynthesis simply, or help me solve 2x + 5 = 17'},
+ {k:'creative',i:'🎨',n:'Creativity',h:'Stories, poems, jokes, names, song ideas and brainstorming.',ph:'e.g. Write a short story about a robot who learns to paint'},
+ {k:'code',i:'💻',n:'Coding',h:'Write, explain and fix code in any language.',ph:'e.g. Write a JavaScript function that checks if a word is a palindrome'},
+ {k:'image',i:'🖼️',n:'Images',h:'Describe a picture and the AI creates it.',ph:'e.g. A red sports car on a mountain road at sunset, digital art'},
+ {k:'video',i:'🎬',n:'Video',h:'',ph:''}];
+const STM={edu:[],creative:[],code:[],image:[]}, STV=[['Kling AI','https://klingai.com','Free daily credits, short clips'],['Dreamina','https://dreamina.capcut.com','Free daily credits for images and video'],['Pika','https://pika.art','Free credits when you sign up'],['Wan on Hugging Face','https://huggingface.co/spaces','Open-source video models, free but can have queues']];
+let stMode='edu', stBusy=0, stTyp=null;
+const stLog=stBody.querySelector('#stLog'), stIn=stBody.querySelector('#stIn'), stBar=stBody.querySelector('#stBar'), stVid=stBody.querySelector('#stVid'), stHint=stBody.querySelector('#stHint'), stTabs=stBody.querySelector('#stTabs');
+function stBubble(m){ const d=document.createElement('div');
+  if(m.role==='user'){ d.className='gmU'; d.textContent=m.content; }
+  else{ d.className='gmA'; d.innerHTML=(window.aiMd||esc)(m.content||''); if(m.img){ const i=new Image(); i.src=m.img; i.className='gmImg'; d.append(i); const a=document.createElement('a'); a.href=m.img; a.download='hp-os-image.png'; a.textContent='⬇ Download'; a.style.cssText='display:inline-block;margin-top:6px;color:#ffb74d'; d.append(a); } }
+  stLog.append(d); stLog.scrollTop=1e9; return d; }
+function stRender(){ stTabs.innerHTML='';
+  ST.forEach(t=>{ const b=document.createElement('button'); b.className='btn sm'+(t.k===stMode?'':' gray'); b.textContent=t.i+' '+t.n; b.onclick=()=>{ stMode=t.k; stRender(); }; stTabs.append(b); });
+  const cur=ST.find(t=>t.k===stMode), isV=stMode==='video';
+  if(!isV){ const n=document.createElement('button'); n.className='btn sm gray'; n.textContent='🗑 Clear'; n.onclick=()=>{ STM[stMode]=[]; stRender(); }; stTabs.append(n); }
+  stHint.textContent=isV?'':cur.h; stLog.style.display=stBar.style.display=isV?'none':''; stVid.style.display=isV?'block':'none'; stIn.placeholder=cur.ph||'';
+  if(isV){ stVid.innerHTML='<p style="color:#ccc">Free video making is not possible inside this app, because there is no free video API. These free websites can make short clips for you. Open one, sign in and type your idea. Free limits change, and free clips are usually only a few seconds long.</p>';
+    STV.forEach(([n,u,d])=>{ const a=document.createElement('a'); a.href=u; a.target='_blank'; a.rel='noopener noreferrer'; a.className='btn'; a.style.cssText='display:block;margin:8px 0;text-align:left;text-decoration:none'; a.innerHTML='🎬 <b>'+esc(n)+'</b><br><small>'+esc(d)+'</small>'; stVid.append(a); }); return; }
+  stLog.innerHTML=''; if(!STM[stMode].length){ const w=document.createElement('div'); w.className='gmA'; w.style.color='#aaa'; w.textContent='Type below to start.'; stLog.append(w); } else STM[stMode].forEach(stBubble); }
+function stSend(){ if(stBusy||stMode==='video') return; const text=stIn.value.trim(); if(!text) return; const mode=stMode, hist=STM[mode].filter(m=>!m.err).map(m=>({role:m.role,content:m.content}));
+  if(!STM[mode].length) stLog.innerHTML=''; const um={role:'user',content:text}; STM[mode].push(um); stBubble(um); stIn.value=''; stBusy=1;
+  stTyp=document.createElement('div'); stTyp.className='gmA'; stTyp.style.color='#aaa'; stTyp.textContent=mode==='image'?'🖼️ Creating your image… this can take up to a minute':'⏳ Thinking…'; stLog.append(stTyp); stLog.scrollTop=1e9;
+  socket.emit('studio_ask',{mode,text,hist:mode==='image'?[]:hist}); }
+stBody.querySelector('#stSend').addEventListener('click',stSend);
+stIn.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); stSend(); } });
+socket.on('studio_reply',r=>{ const mode=r&&r.mode; if(!STM[mode]) return; stBusy=0; if(stTyp){ stTyp.remove(); stTyp=null; }
+  const m=r.err?{role:'assistant',content:'⚠️ '+r.err,err:1}:{role:'assistant',content:r.text||'',img:r.img||''}; STM[mode].push(m); while(STM[mode].length>30) STM[mode].shift();
+  if(stMode===mode){ if(STM[mode].length===1) stLog.innerHTML=''; stBubble(m); } });
+stRender();
+}catch(e){ console.error('AI Studio:',e); }
+
+/* Voice assistant: say "Hey Google", "OK Google" or "Hey HP", then a command (play a song, ask a question) */
+try{
+const vaBody=el('div',{});
+vaBody.innerHTML='<div style="text-align:center"><button class="btn green" id="vaToggle" style="font-size:18px;padding:12px 22px">🎙 Turn on voice assistant</button><div id="vaStat" style="margin:8px 0;color:#aaa">Off</div></div><div id="vaNow" style="display:none;margin:8px 0"></div><div id="vaLog" style="max-height:34vh;overflow:auto;padding:4px"></div><div style="display:flex;gap:6px;margin-top:8px"><input id="vaIn" type="text" placeholder="Or type a command, e.g. play Kesariya" style="flex:1;min-width:0"/><button class="btn" id="vaAsk">Ask</button></div><div style="margin-top:8px">Language: <select id="vaLang"><option value="en-IN">English (India)</option><option value="en-US">English (US)</option><option value="hi-IN">हिन्दी</option><option value="mr-IN">मराठी</option></select></div><small style="color:#888;display:block;margin-top:8px">Turn it on once, then say <b>"Hey Google"</b>, <b>"OK Google"</b> or <b>"Hey HP"</b> and a command: "play Shape of You", "next song", "stop", "what time is it", or ask any question. It listens only while this website is open (screen on) and works best in Chrome or Edge. iPhone Safari does not support it. Your browser sends what you say to Google to turn it into text.</small>';
+mkApp('vaApp','Voice Assistant','🎙','Assistant',vaBody);
+const q=s=>vaBody.querySelector(s), vaTog=q('#vaToggle'), vaStat=q('#vaStat'), vaLog=q('#vaLog'), vaNow=q('#vaNow'), vaIn=q('#vaIn'), vaLang=q('#vaLang');
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const WAKE=/\b(?:hey|hi|ok|okay|o\.k\.)\s*(?:google|goggle|hp|h\.p\.|h p)\b|(?:हे|ओके|ओ के)\s*(?:गूगल|गुगल|एच ?पी)/i;
+const V={on:0,rec:null,awaiting:0,awaitT:0,speaking:0,hist:[],res:[],idx:0,wl:null};
+try{ vaLang.value=localStorage.getItem('vaLang')||'en-IN'; }catch(e){}
+vaLang.onchange=()=>{ try{ localStorage.setItem('vaLang',vaLang.value); }catch(e){} if(V.on&&V.rec) try{ V.rec.stop(); }catch(e){} };
+const idleTxt='Listening for "Hey Google", "OK Google" or "Hey HP"…';
+const vaStatus=t=>{ vaStat.textContent=t; };
+function vaAdd(role,text){ const d=document.createElement('div'); d.className=role==='user'?'gmU':'gmA'; d.textContent=text; vaLog.append(d); vaLog.scrollTop=1e9; }
+function vaBeep(){ try{ const A=V.ac||(V.ac=new (window.AudioContext||window.webkitAudioContext)()), o=A.createOscillator(), g=A.createGain(), t=A.currentTime; o.connect(g); g.connect(A.destination); o.frequency.setValueAtTime(660,t); o.frequency.setValueAtTime(880,t+.09); g.gain.setValueAtTime(.1,t); g.gain.exponentialRampToValueAtTime(.001,t+.2); o.start(t); o.stop(t+.22); }catch(e){} }
+function vaSay(text,done){ text=String(text||'').replace(/[*#`_>|~]/g,'').replace(/\s+/g,' ').trim().slice(0,600); vaAdd('assistant',text); let fin=0; const end=()=>{ if(fin) return; fin=1; setTimeout(()=>{ V.speaking=0; },500); if(done) done(); };
+  if(!window.speechSynthesis||!text){ end(); return; }
+  try{ V.speaking=1; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang=vaLang.value; u.onend=end; u.onerror=end; speechSynthesis.speak(u); setTimeout(end,Math.min(30000,2500+text.length*90)); }catch(e){ end(); } }
+function vaStopMusic(){ vaNow.innerHTML=''; vaNow.style.display='none'; }
+function vaPlayItem(it){ vaNow.style.display='block'; vaNow.innerHTML='<div style="font-weight:bold;margin-bottom:6px">🎵 '+esc(it.title)+'</div><div style="position:relative;padding-top:56.25%"><iframe style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:8px" src="https://www.youtube-nocookie.com/embed/'+encodeURIComponent(it.id)+'?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe></div><small style="color:#888">If the music does not start, tap play on the video. Say "next song" or "stop".</small>'; }
+async function vaPlay(query){
+  let j; try{ const r=await fetch('/api/search?type=yt&q='+encodeURIComponent(query+' song'),{headers:{Authorization:'Bearer '+(localStorage.getItem('token')||'')}}); j=await r.json(); }catch(e){ j={error:'Search failed'}; }
+  if(!j||j.error||!(j.items||[]).length){ const link='https://www.youtube.com/results?search_query='+encodeURIComponent(query); vaNow.style.display='block'; vaNow.innerHTML='<a class="btn" target="_blank" rel="noopener noreferrer" href="'+esc(link)+'" style="text-decoration:none">▶ Open "'+esc(query)+'" on YouTube</a>';
+    return vaSay(j&&j.error&&/not set up/i.test(j.error)?'I cannot search songs yet. The owner needs to add a YouTube key on Render. You can tap the button to open YouTube.':(j&&j.items&&!j.items.length?'I could not find that song.':'I could not search YouTube right now. You can tap the button to open it.')); }
+  V.res=j.items; V.idx=0; const it=V.res[0]; vaSay('Playing '+it.title,()=>vaPlayItem(it)); }
+function vaRun(cmd){ cmd=String(cmd||'').trim(); if(!cmd) return; vaAdd('user',cmd); const l=cmd.toLowerCase().replace(/[.!?]+$/,''); let m;
+  if(/^(?:please\s+)?(?:stop|pause|quiet|silence|stop (?:the )?(?:music|song|video|playing)|turn off (?:the )?music)$/.test(l)||/^(?:रुको|बंद करो|बंद कर)$/.test(l)){ vaStopMusic(); try{ speechSynthesis.cancel(); }catch(e){} return vaSay('Okay, stopped.'); }
+  if(/^(?:next|skip|next song|play (?:the )?next(?: song)?|play another(?: song)?)$/.test(l)){ if(!V.res.length) return vaSay('Nothing is playing yet. Say play, then a song name.'); V.idx=(V.idx+1)%V.res.length; const it=V.res[V.idx]; return vaSay('Next: '+it.title,()=>vaPlayItem(it)); }
+  if((m=/^(?:please\s+)?play\s+(.+)$/.exec(l))){ const s=m[1].replace(/\s+(?:on youtube|for me|please)$/,'').replace(/\s+song$/,'').trim(); if(s) return vaPlay(s); }
+  if(/\bwhat(?:'s| is)?\s+the\s+time\b|\btime\s+is\s+it\b|\bcurrent time\b|\btell me the time\b/.test(l)) return vaSay('It is '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})+'.');
+  if(/\bwhat(?:'s| is)?\s+(?:the\s+)?(?:today'?s\s+)?date\b|\bwhat day is (?:it|today)\b|\btoday'?s date\b/.test(l)) return vaSay('Today is '+new Date().toLocaleDateString([],{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'.');
+  vaStatus('Thinking…'); V.wait=1; socket.emit('studio_ask',{mode:'voice',text:cmd.slice(0,500),hist:V.hist.slice(-6)}); V.last=cmd; }
+socket.on('studio_reply',r=>{ if(!r||r.mode!=='voice') return; V.wait=0; if(V.on) vaStatus(idleTxt); if(r.err) return vaSay(r.err); V.hist.push({role:'user',content:V.last||''},{role:'assistant',content:String(r.text||'').slice(0,600)}); V.hist=V.hist.slice(-12); vaSay(r.text||'Sorry, I have no answer for that.'); });
+function vaHear(t){ const m=WAKE.exec(t);
+  if(m){ const cmd=t.slice(m.index+m[0].length).replace(/^[\s,.:;!?-]+/,'').trim(); if(cmd){ V.awaiting=0; return vaRun(cmd); } V.awaiting=1; clearTimeout(V.awaitT); V.awaitT=setTimeout(()=>{ V.awaiting=0; if(V.on) vaStatus(idleTxt); },9000); vaBeep(); vaStatus('Yes? I am listening…'); return; }
+  if(V.awaiting){ V.awaiting=0; clearTimeout(V.awaitT); vaStatus(idleTxt); vaRun(t); } }
+function vaListen(){ if(!V.on) return; const r=new SR(); V.rec=r; r.lang=vaLang.value; r.continuous=true; r.interimResults=false;
+  r.onstart=()=>vaStatus(V.awaiting?'Yes? I am listening…':idleTxt);
+  r.onresult=e=>{ if(V.speaking) return; for(let i=e.resultIndex;i<e.results.length;i++){ const res=e.results[i]; if(!res.isFinal) continue; const t=String(res[0].transcript||'').trim(); if(t) vaHear(t); } };
+  r.onerror=e=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed'){ toast('Microphone permission is blocked. Allow the microphone for this site and try again.'); vaOff(); } };
+  r.onend=()=>{ if(V.on) setTimeout(()=>{ if(V.on&&V.rec===r) vaListen(); },350); };
+  try{ r.start(); }catch(e){} }
+async function vaWake(){ try{ if(navigator.wakeLock&&!V.wl) V.wl=await navigator.wakeLock.request('screen'); if(V.wl) V.wl.addEventListener('release',()=>{ V.wl=null; }); }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(V.on&&document.visibilityState==='visible') vaWake(); });
+function vaOn(){ if(!SR) return toast('Voice listening is not supported in this browser. Use Chrome or Edge, or type your command below.'); V.on=1; vaTog.textContent='⏹ Turn off voice assistant'; vaTog.className='btn gray'; vaTog.style.cssText='font-size:18px;padding:12px 22px'; vaBeep(); vaWake(); vaListen(); }
+function vaOff(){ V.on=0; V.awaiting=0; clearTimeout(V.awaitT); try{ if(V.rec) V.rec.stop(); }catch(e){} V.rec=null; try{ if(V.wl) V.wl.release(); }catch(e){} V.wl=null; vaTog.textContent='🎙 Turn on voice assistant'; vaTog.className='btn green'; vaTog.style.cssText='font-size:18px;padding:12px 22px'; vaStatus('Off'); }
+vaTog.addEventListener('click',()=>{ if(V.on) vaOff(); else vaOn(); });
+const vaGo=()=>{ const t=vaIn.value.trim(); if(!t) return; vaIn.value=''; const m=WAKE.exec(t); vaRun(m?t.slice(m.index+m[0].length).replace(/^[\s,.:;!?-]+/,''):t); };
+q('#vaAsk').addEventListener('click',vaGo); vaIn.addEventListener('keydown',e=>{ if(e.key==='Enter') vaGo(); });
+}catch(e){ console.error('Voice assistant:',e); }
+
+const _omG=openModal; openModal=function(id){ _omG(id); if(id==='hcApp'){ if(!HC) hcNew(); else hcLoop(); } if(id==='slApp'&&!SL) slNew(); if(id==='mzApp'){ if(!MZ) mzNew(); else mzLoop(); } if(id==='rcApp'){ if(!RC) rcNew('endless'); else rcLoop(); } };
 
 /* ===== Quiz (AI writes the questions) ===== */
 const qzBody=el('div',{});
