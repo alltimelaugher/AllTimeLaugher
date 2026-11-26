@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<title>Gemini OS</title>
+<title>HP OS</title>
 <link rel="manifest" href="/manifest.webmanifest"/>
 <link rel="icon" type="image/png" href="/favicon.png"/>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
 <meta name="theme-color" content="#0c0202"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-title" content="Gemini OS"/>
+<meta name="apple-mobile-web-app-title" content="HP OS"/>
 <style>
 :root{--bg:#0c0202;--pn:#1f0606;--bd:#3d1515;--ac:#e05656;--tx:#e5b3b3;--hi:#ff8a8a}
 *{box-sizing:border-box}
@@ -148,7 +148,7 @@ h4{color:var(--hi);margin:14px 0 8px}
 .sq.l{background:#f0d9b5}.sq.d{background:#b58863}.sq.last{box-shadow:inset 0 0 0 100px rgba(255,235,59,.35)}.sq.sel{background:#f7ec74!important}.sq.chk{background:#e53935!important}
 .sq.tgt::after{content:'';width:28%;height:28%;border-radius:50%;background:rgba(0,0,0,.3);position:absolute}.sq.tgt.cap::after{width:86%;height:86%;background:transparent;border:4px solid rgba(0,0,0,.35)}
 .pw{color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 0 3px #000}.pb{color:#161616;text-shadow:0 0 1px rgba(255,255,255,.4)}
-.rtag{font-size:10px;font-weight:bold;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle}.rtag.owner{background:#ffb300;color:#000}.rtag.admin{background:#1a73e8;color:#fff}
+.rtag{font-size:10px;font-weight:bold;padding:1px 6px;border-radius:8px;margin-left:4px;vertical-align:middle}.rtag.owner{background:#ffb300;color:#000}.rtag.admin{background:#1a73e8;color:#fff}.rtag.coowner{background:#7b1fa2;color:#fff}.rtag.coadmin{background:#0d47a1;color:#bbdefb;border:1px solid #64b5f6}
 /* NEW: shop ranks, rainbow name, shop cards */
 .rtag.rank_vip{background:#2a2200;color:#ffd54f;border:1px solid #ffd54f}.rtag.rank_pro{background:#00263a;color:#4fc3f7;border:1px solid #4fc3f7}.rtag.rank_elite{background:#3a1200;color:#ff8a50;border:1px solid #ff8a50}.rtag.rank_legend{background:linear-gradient(90deg,#7b1fa2,#c2185b);color:#fff;border:1px solid #f48fb1}
 .rainbow{background:linear-gradient(90deg,#ff5252,#ffa726,#ffee58,#66bb6a,#42a5f5,#ab47bc);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:bold}
@@ -270,7 +270,7 @@ html,body{overflow:hidden;overscroll-behavior:none}
 
 <!-- ============ LOGIN / SIGN UP ============ -->
 <div id="authModal" class="modal">
-  <div class="modal-header"><h3>Welcome to Gemini OS</h3></div>
+  <div class="modal-header"><h3>Welcome to HP OS</h3></div>
   <div class="modal-body" style="display:flex">
     <div class="auth-card">
       <div id="storeWarn" style="display:none;background:#7a1212;padding:8px;border-radius:8px;font-size:12px;margin-bottom:10px">⚠ Server storage is temporary: accounts will be erased when the server restarts. The owner must set up MongoDB.</div>
@@ -343,7 +343,7 @@ html,body{overflow:hidden;overscroll-behavior:none}
 <!-- ============ MAIN APP ============ -->
 <div id="app">
   <nav id="side">
-    <div class="brand">✦ Gemini OS</div>
+    <div class="brand"><svg width="26" height="26" viewBox="0 0 100 100" style="vertical-align:middle;margin-right:6px"><defs><linearGradient id="hpg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9a9a"/><stop offset="1" stop-color="#8e1b1b"/></linearGradient></defs><path d="M50 5 90 27.5v45L50 95 10 72.5v-45z" fill="#1a0505" stroke="url(#hpg)" stroke-width="5" stroke-linejoin="round"/><path d="M26 28V72M50 28V72M26 52H50M50 28H60A12 12 0 0 1 60 52H50" fill="none" stroke="url(#hpg)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>HP OS</div>
     <button class="nav more" onclick="goHome()">🏠<span>Home</span></button>
     <button class="nav" title="Messages" onclick="openModal('chatApp')">💬<span>Messages</span><b id="unreadTotal"></b></button>
     <button class="nav" title="Calls" onclick="openModal('phoneApp')">📞<span>Calls</span></button>
@@ -359,7 +359,7 @@ html,body{overflow:hidden;overscroll-behavior:none}
     <div id="recBanner"></div>
     <div id="offlineBar">📴 Offline — text messages will send when you reconnect</div>
     <div class="topbar">
-      <span><svg width="22" height="22" viewBox="0 0 100 100" style="vertical-align:middle;margin-right:6px"><defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b6b"/><stop offset="1" stop-color="#c62828"/></linearGradient></defs><path d="M50 4C52 30 70 48 96 50C70 52 52 70 50 96C48 70 30 52 4 50C30 48 48 30 50 4Z" fill="url(#gl)"/></svg>👥 <span id="onlineCount" class="badge">0</span> 👁 <span id="visitCount" class="badge">0</span></span>
+      <span><svg width="22" height="22" viewBox="0 0 100 100" style="vertical-align:middle;margin-right:6px"><defs><linearGradient id="hpg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9a9a"/><stop offset="1" stop-color="#8e1b1b"/></linearGradient></defs><path d="M50 5 90 27.5v45L50 95 10 72.5v-45z" fill="#1a0505" stroke="url(#hpg2)" stroke-width="5" stroke-linejoin="round"/><path d="M26 28V72M50 28V72M26 52H50M50 28H60A12 12 0 0 1 60 52H50" fill="none" stroke="url(#hpg2)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>👥 <span id="onlineCount" class="badge">0</span> 👁 <span id="visitCount" class="badge">0</span></span>
       <span style="display:flex;gap:8px;align-items:center">
         <button class="btn sm green" onclick="addFriendQuick()">➕ Add friend</button>
         <button class="btn sm gray" onclick="openModal('settingsModal')">⚙️</button>
@@ -1301,20 +1301,22 @@ setInterval(async()=>{
 let AD={users:[],bans:[],words:[],owner:false}, myRole='';
 let SHOP={items:{},own:[],rank:'',color:'',badge:'',coins:0,fx:0}; // NEW: filled by the server ('shop_state')
 const rankTag=k=>{ const it=SHOP.items[k]; if(!it||it.cat!=='rank') return ''; return '<span class="rtag '+k+'"'+(it.fg?' style="background:'+it.fg+'22;color:'+it.fg+';border:1px solid '+it.fg+'"':'')+'>'+it.icon+' '+it.name+'</span>'; };
-const tag=(r,k)=>(r==='owner'?'<span class="rtag owner">👑 OWNER</span>':r==='admin'?'<span class="rtag admin">🛡️ ADMIN</span>':'')+rankTag(r==='owner'||r==='admin'?k:(r||k)); // owners and admins now also show the rank they bought
+const tag=(r,k)=>({owner:'<span class="rtag owner">👑 OWNER</span>',coowner:'<span class="rtag coowner">💎 CO-OWNER</span>',admin:'<span class="rtag admin">🛡️ ADMIN</span>',coadmin:'<span class="rtag coadmin">🔰 CO-ADMIN</span>'}[r]||'')+rankTag(['owner','coowner','admin','coadmin'].includes(r)?k:(r||k));
 // NEW: a person's name with their bought colour and badge
 function nameStyle(it){ return it.grad?'background:'+it.grad+';-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:bold':it.glow?'color:'+it.css+';text-shadow:0 0 8px '+it.css+';font-weight:bold':'color:'+it.css; }
 function fxName(n){ const p=dirMap[n]||{}, col=SHOP.items[p.color], b=SHOP.items[p.badge]; const rb=col&&col.css==='rainbow'; return (b&&b.cat==='badge'?b.icon+' ':'')+'<span'+(rb?' class="rainbow"':(col&&col.cat==='color'?' style="'+nameStyle(col)+'"':''))+'>'+esc(n)+'</span>'; }
 function fxRefresh(){ if(SHOP.fx||!Object.keys(SHOP.items).length||!directory.length) return; SHOP.fx=1; try{ renderChat(); }catch(e){} } // redraw chat once so old messages get colours
+const isO=r=>r==='owner'||r==='coowner';
 function openAdmin(){ openModal('adminModal'); socket.emit('admin_data'); }
 function renderAdmin(){
   const q=($('admSearch').value||'').trim().toLowerCase();
   const list=AD.users.filter(u=>u.name.toLowerCase().includes(q)).sort((a,b)=>(b.online-a.online)||a.name.localeCompare(b.name));
   $('admUsers').innerHTML=list.map(u=>{
-    const n=enc(u.name), canBan=!u.real&&u.name!==me&&(u.role!=='owner'||AD.real)&&(u.role!=='admin'||AD.owner);
+    const n=enc(u.name), canBan=!u.real&&u.name!==me&&(!isO(u.role)||AD.real)&&(!(u.role==='admin'||u.role==='coadmin')||AD.owner);
     return '<div class="user-card"><div>'+(u.online?'🟢 ':'⚪ ')+esc(u.name)+tag(u.role)+'<br><small style="color:#888">IP: '+esc(u.ips.join(', ')||'unknown')+' · strikes '+u.strikes+'</small></div><div class="user-actions">'
-      +(AD.owner&&u.role!=='owner'?'<button class="btn sm '+(u.role==='admin'?'gray':'blue')+'" onclick="admSetAdmin(\''+n+'\','+(u.role==='admin'?'false':'true')+')">'+(u.role==='admin'?'Remove admin':'🛡 Make admin')+'</button>':'')
-      +(AD.real&&!u.real?'<button class="btn sm '+(u.role==='owner'?'gray':'green')+'" onclick="admSetOwner(\''+n+'\','+(u.role==='owner'?'false':'true')+')">'+(u.role==='owner'?'Remove owner':'\ud83d\udc51 Make owner')+'</button>':'')
+      +(AD.owner&&!isO(u.role)?'<button class="btn sm '+(u.role==='admin'?'gray':'blue')+'" onclick="admSetAdmin(\''+n+'\','+(u.role==='admin'?'false':'true')+')">'+(u.role==='admin'?'Remove admin':'🛡 Make admin')+'</button>':'')
+      +(AD.owner&&!isO(u.role)?'<button class="btn sm '+(u.role==='coadmin'?'gray':'blue')+'" onclick="socket.emit(\'set_coadmin\',{name:decodeURIComponent(\''+n+'\'),on:'+(u.role==='coadmin'?'false':'true')+'})">'+(u.role==='coadmin'?'Remove co-admin':'🔰 Make co-admin')+'</button>':'')
+      +(AD.real&&!u.real?'<button class="btn sm '+(isO(u.role)?'gray':'green')+'" onclick="admSetOwner(\''+n+'\','+(isO(u.role)?'false':'true')+')">'+(isO(u.role)?'Remove owner':'\ud83d\udc51 Make owner')+'</button>':'')
       +(canBan?'<button class="btn sm" onclick="admBan(\''+n+'\')">🔨 Ban</button>':'')+'</div></div>';
   }).join('')||'<small style="color:#888">No users found</small>';
 }
@@ -2979,30 +2981,16 @@ const st=document.createElement('style'); st.textContent=`
 .gmB{border:0;background:var(--pn);color:var(--tx);width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;flex:none}.gmB.on{background:var(--ac);color:#fff}
 #gmLang{background:#1a0505;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:4px}
 @media(max-width:800px){#gmSide{position:absolute;z-index:5;top:0;bottom:0;left:0;transform:translateX(-102%);transition:.2s}#gmSide.open{transform:none;box-shadow:0 0 40px #000}}
-@media(min-width:801px){#gmMenu{display:none}}
-.gmLbl{padding:6px 18px 2px;font-size:12px;color:var(--tx);opacity:.7}
-#gmSide{width:260px}
-#gmBar{margin:0 12px;padding:6px 8px;border:1px solid var(--bd);border-radius:28px;background:#1a0505;align-items:center}
-#gmBar #gmIn{border:0;background:transparent;outline:0}
-#gmNote{font-size:11px;line-height:1.3;color:#a98080;text-align:center;padding:6px 12px 10px}
-.gmHi{margin:6vh 0 14px}.gmHi h2{margin:0;font-size:30px;font-weight:500;background:linear-gradient(90deg,#6ea8ff,#c58bff,#ff8a8a);-webkit-background-clip:text;background-clip:text;color:transparent}
-.gmHi p{margin:4px 0 0;font-size:22px;color:#b99}
-.gmChips{display:flex;gap:8px;flex-wrap:wrap}
-.gmChips button{background:#2a0b0b;border:1px solid var(--bd);color:var(--tx);border-radius:14px;padding:10px 14px;font-size:13px;cursor:pointer;text-align:left}
-.gmChips button:hover{background:#3a1010}`;
+@media(min-width:801px){#gmMenu{display:none}}`;
 document.head.append(st);
 const aiBody=el('div',{}); aiBody.style.cssText='display:flex;flex:1;min-width:0;height:100%';
-aiBody.innerHTML='<div id="gmSide"><div style="padding:10px"><button class="btn green" id="gmNew" style="width:100%">＋ New chat</button></div><div class="gmLbl">Recent</div><div id="gmList"></div></div><div id="gmMain"><div id="gmTop"><button class="gmB" id="gmMenu">☰</button><span id="gmTitle">Gemini</span><select id="gmLang"><option value="en-IN">English (India)</option><option value="hi-IN">हिन्दी</option><option value="mr-IN">मराठी</option><option value="en-US">English (US)</option></select></div><div id="gmLog"></div><div id="gmAtt"></div><div id="gmBar"><button class="gmB" id="gmClip" title="Attach files or photos">📎</button><textarea id="gmIn" rows="1" placeholder="Ask Gemini"></textarea><button class="gmB" id="gmMic" title="Voice typing">🎤</button><button class="gmB" id="gmImgT" title="Create an image">🖼</button><button class="gmB" id="gmSend" style="background:var(--ac);color:#fff">➤</button></div><div id="gmNote">AI can make mistakes, so double-check important info.</div><input type="file" id="gmFile" multiple hidden accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.js,.ts,.py,.java,.c,.cpp,.html,.css,.xml,.yml,.yaml,.log,.sql"></div>';
+aiBody.innerHTML='<div id="gmSide"><div style="padding:10px"><button class="btn green" id="gmNew" style="width:100%">＋ New chat</button></div><div id="gmList"></div></div><div id="gmMain"><div id="gmTop"><button class="gmB" id="gmMenu">☰</button><span id="gmTitle">Gemini</span><select id="gmLang"><option value="en-IN">English (India)</option><option value="hi-IN">हिन्दी</option><option value="mr-IN">मराठी</option><option value="en-US">English (US)</option></select></div><div id="gmLog"></div><div id="gmAtt"></div><div id="gmBar"><button class="gmB" id="gmClip" title="Attach files or photos">📎</button><textarea id="gmIn" rows="1" placeholder="Ask Gemini"></textarea><button class="gmB" id="gmMic" title="Voice typing">🎤</button><button class="gmB" id="gmImgT" title="Create an image">🖼</button><button class="gmB" id="gmSend" style="background:var(--ac);color:#fff">➤</button></div><input type="file" id="gmFile" multiple hidden accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.js,.ts,.py,.java,.c,.cpp,.html,.css,.xml,.yml,.yaml,.log,.sql"></div>';
 mkApp('aiApp','Gemini','✨','Gemini',aiBody);
 const gm={id:null,busy:0,att:[],img:0,title:'New chat',pdf:0,list:[]};
 const load=src=>new Promise((ok,no)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=no; document.head.append(s); });
 const readURL=f=>new Promise(ok=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.readAsDataURL(f); });
 const shrink=(src,max,q)=>new Promise(ok=>{ const im=new Image(); im.onload=()=>{ const k=Math.min(1,max/Math.max(im.width,im.height)), c=document.createElement('canvas'); c.width=Math.max(1,im.width*k); c.height=Math.max(1,im.height*k); const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(im,0,0,c.width,c.height); ok(c.toDataURL('image/jpeg',q)); }; im.src=src; });
-function welcome(){ const L=G('gmLog'); L.innerHTML=''; const d=document.createElement('div'); d.className='gmA gmHi';
-  d.innerHTML='<h2>Hello'+(window.me?', '+esc(window.me):'')+'</h2><p>How can I help you today?</p>';
-  const c=document.createElement('div'); c.className='gmChips';
-  ['Explain something simply','Write a short story','Help me with code','Create an image of a sunset'].forEach(t=>{ const b=document.createElement('button'); b.textContent=t; b.onclick=()=>{ if(gm.busy) return; if(/image/i.test(t)&&!gm.img) G('gmImgT').click(); G('gmIn').value=t.replace(/^Create an image of /,''); send(); }; c.append(b); });
-  d.append(c); L.append(d); }
+function welcome(){ G('gmLog').innerHTML=''; const d=document.createElement('div'); d.className='gmA'; d.innerHTML='<h3>Hello 👋</h3><p>Ask me anything. Attach files or photos with 📎, talk with 🎤, or tap 🖼 and describe an image to create it.</p>'; G('gmLog').append(d); }
 function setTitle(t){ gm.title=t||'New chat'; G('gmTitle').textContent=gm.title; }
 function bubble(m){
   const d=document.createElement('div');
@@ -3072,6 +3060,60 @@ socket.on('ai_reply',async r=>{ gm.busy=0; if(gm.typ){ gm.typ.remove(); gm.typ=n
 const _om=openModal; openModal=function(id){ _om(id); if(id==='aiApp'){ socket.emit('ai_list'); if(!G('gmLog').children.length) welcome(); } };
 welcome();
 })();
+/* ===== YouTube app: search + mic + shorts + recent + Google account (liked videos) ===== */
+(function(){
+const Y=id=>document.getElementById(id), esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const css=document.createElement('style'); css.textContent=`
+#ytApp .modal-body{padding:0;display:flex;flex-direction:column;overflow:hidden}
+#ytTop{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--bd)}
+#ytQ{flex:1;min-width:0;border-radius:20px}
+.ytB{border:0;background:var(--pn);color:var(--tx);width:38px;height:38px;border-radius:50%;font-size:17px;cursor:pointer;flex:none}.ytB.on{background:#e53935;color:#fff}
+#ytTabs,#ytRec{display:flex;gap:6px;padding:6px 10px;overflow-x:auto;flex:none}
+#ytTabs button,#ytRec span{border:1px solid var(--bd);background:none;color:var(--tx);border-radius:14px;padding:5px 12px;cursor:pointer;white-space:nowrap;font-size:13px}
+#ytTabs button.on{background:#fff;color:#000}#ytRec span{background:#2a0b0b}
+#ytBody{flex:1;overflow-y:auto;padding:10px}
+.ytGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.ytCard{cursor:pointer}.ytCard img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;background:#222}
+.ytCard b{display:block;font-size:13px;margin-top:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ytCard small{color:#999}
+.ytVid iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:12px;margin-top:8px}
+.ytShort{display:flex;flex-direction:column;align-items:center;gap:8px}.ytShort iframe{width:min(100%,300px);aspect-ratio:9/16;border:0;border-radius:16px}`;
+document.head.append(css);
+const body=document.createElement('div'); body.style.cssText='display:flex;flex-direction:column;flex:1;min-height:0;height:100%';
+body.innerHTML='<div id="ytTop"><b style="white-space:nowrap">▶ YouTube</b><input type="text" id="ytQ" placeholder="Search videos" autocomplete="off"/><button class="ytB" id="ytMic" title="Search by voice">🎤</button><button class="ytB" id="ytGo" title="Search">🔍</button><button class="ytB" id="ytSign" title="Sign in with Google">👤</button></div><div id="ytTabs"><button data-t="home" class="on">🏠 Home</button><button data-t="shorts">⚡ Shorts</button><button data-t="liked">❤️ Liked</button><button data-t="recent">🕘 Recent</button></div><div id="ytRec"></div><div id="ytBody"></div>';
+mkApp('ytApp','YouTube','▶️','YouTube',body);
+const S={tab:'home',tok:'',liked:[],sh:[],si:0,map:{},cur:[],rec:JSON.parse(localStorage.getItem('ytRecent')||'[]')};
+const hdr=()=>({Authorization:'Bearer '+(localStorage.getItem('token')||'')});
+const api=async(q,type)=>{ try{ return await (await fetch('/api/search?type='+type+'&q='+encodeURIComponent(q),{headers:hdr()})).json(); }catch(e){ return {error:'Search failed'}; } };
+const errMsg=j=>'<p style="color:#ffb300">'+esc(j&&j.error?(/not set up/i.test(j.error)?'YouTube search is not set up yet. The owner must add YOUTUBE_API_KEY on Render.':j.error):'Nothing found.')+'</p>';
+function recChips(){ Y('ytRec').innerHTML=S.rec.map(q=>'<span data-q="'+esc(q)+'">🕘 '+esc(q)+'</span>').join('')+(S.rec.length?'<span data-clear="1">✕ Clear</span>':''); }
+function list(title,items){ S.cur=items; items.forEach(v=>S.map[v.id]=v); Y('ytBody').innerHTML='<h4 style="margin:0 0 8px">'+esc(title)+'</h4>'+(items.length?'<div class="ytGrid">'+items.map(v=>'<div class="ytCard" data-id="'+esc(v.id)+'"><img loading="lazy" src="'+esc(v.img||'')+'" alt=""><b>'+esc(v.title)+'</b><small>'+esc(v.by||'')+'</small></div>').join('')+'</div>':'<p style="color:#aaa">Nothing here yet.</p>'); }
+function play(v){ const w=JSON.parse(localStorage.getItem('ytWatched')||'[]').filter(x=>x.id!==v.id); w.unshift(v); localStorage.setItem('ytWatched',JSON.stringify(w.slice(0,30)));
+  Y('ytBody').innerHTML='<button class="btn sm gray" id="ytBack">← Back</button><div class="ytVid"><iframe allow="autoplay; encrypted-media; fullscreen" allowfullscreen src="https://www.youtube-nocookie.com/embed/'+encodeURIComponent(v.id)+'?autoplay=1&rel=0&playsinline=1"></iframe></div><h4>'+esc(v.title)+'</h4><small style="color:#999">'+esc(v.by||'')+'</small>'; }
+function shortView(){ const v=S.sh[S.si]; if(!v) return; Y('ytBody').innerHTML='<div class="ytShort"><iframe allow="autoplay; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/'+encodeURIComponent(v.id)+'?autoplay=1&loop=1&playlist='+encodeURIComponent(v.id)+'&playsinline=1&rel=0"></iframe><div style="font-size:13px;text-align:center">'+esc(v.title)+'</div><div><button class="btn sm gray" data-sh="-1">▲ Previous</button> <button class="btn sm" data-sh="1">▼ Next</button></div></div>'; }
+async function go(t){ S.tab=t; document.querySelectorAll('#ytTabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); const B=Y('ytBody'); B.innerHTML='<p style="color:#aaa">Loading…</p>';
+  if(t==='home'){ if(S.tok&&S.liked.length) return list('❤️ From your liked videos',S.liked.slice().sort(()=>Math.random()-.5)); const q=S.rec[0]||'trending music', j=await api(q,'yt'); return j.error||!(j.items||[]).length?B.innerHTML=errMsg(j):list(S.rec[0]?'Because you searched “'+q+'”':'Trending',j.items); }
+  if(t==='shorts'){ const j=await api(S.rec[0]||'funny','shorts'); if(j.error||!(j.items||[]).length) return B.innerHTML=errMsg(j); S.sh=j.items; S.si=0; return shortView(); }
+  if(t==='liked') return S.tok?list('❤️ Liked videos',S.liked):B.innerHTML='<p>Tap 👤 and sign in with Google to see the videos you liked.</p>';
+  if(t==='recent') return list('🕘 Recently watched',JSON.parse(localStorage.getItem('ytWatched')||'[]')); }
+async function search(q){ q=String(q||Y('ytQ').value).trim(); if(!q) return; Y('ytQ').value=q; S.rec=[q,...S.rec.filter(x=>x!==q)].slice(0,10); localStorage.setItem('ytRecent',JSON.stringify(S.rec)); recChips();
+  document.querySelectorAll('#ytTabs button').forEach(b=>b.classList.remove('on')); Y('ytBody').innerHTML='<p style="color:#aaa">Searching…</p>'; const j=await api(q,'yt'); j.error||!(j.items||[]).length?Y('ytBody').innerHTML=errMsg(j):list('Results for “'+q+'”',j.items); }
+async function loadLiked(){ const r=await fetch('https://www.googleapis.com/youtube/v3/videos?part=snippet&myRating=like&maxResults=30',{headers:{Authorization:'Bearer '+S.tok}}), j=await r.json(); if(j.error) throw new Error(j.error.message); S.liked=(j.items||[]).map(i=>({id:i.id,title:i.snippet.title,by:i.snippet.channelTitle,img:(i.snippet.thumbnails.medium||{}).url})); }
+async function signIn(){ const c=await fetch('/config').then(r=>r.json()).catch(()=>({})); if(!c.googleClientId) return toast('Google sign-in is not set up (owner: set GOOGLE_CLIENT_ID)');
+  if(!(window.google&&google.accounts&&google.accounts.oauth2)) await new Promise(ok=>{ const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.onload=ok; s.onerror=ok; document.head.append(s); });
+  if(!(window.google&&google.accounts&&google.accounts.oauth2)) return toast('Could not load Google sign-in');
+  google.accounts.oauth2.initTokenClient({client_id:c.googleClientId,scope:'https://www.googleapis.com/auth/youtube.readonly',callback:async r=>{ if(r.error||!r.access_token) return toast('Google sign-in cancelled'); S.tok=r.access_token; try{ await loadLiked(); toast('✅ YouTube account connected'); Y('ytSign').classList.add('on'); go('home'); }catch(e){ S.tok=''; toast('YouTube said: '+e.message); } }}).requestAccessToken(); }
+Y('ytSign').onclick=()=>{ if(S.tok){ S.tok=''; S.liked=[]; Y('ytSign').classList.remove('on'); toast('Signed out of YouTube'); go('home'); } else signIn(); };
+Y('ytGo').onclick=()=>search(); Y('ytQ').addEventListener('keydown',e=>{ if(e.key==='Enter') search(); });
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition; let rec=null;
+Y('ytMic').onclick=()=>{ if(!SR) return alert('Voice search needs Chrome (or a browser with speech recognition).'); if(rec){ rec.stop(); return; }
+  rec=new SR(); rec.lang=localStorage.getItem('gmLang')||'en-IN'; rec.interimResults=false; rec.onresult=e=>{ search(e.results[0][0].transcript); }; rec.onend=()=>{ rec=null; Y('ytMic').classList.remove('on'); }; rec.onerror=e=>{ if(e.error==='not-allowed') alert('Allow microphone access for this site.'); }; rec.start(); Y('ytMic').classList.add('on'); };
+Y('ytTabs').onclick=e=>{ const b=e.target.closest('button'); if(b) go(b.dataset.t); };
+Y('ytRec').onclick=e=>{ const s=e.target.closest('span'); if(!s) return; if(s.dataset.clear){ S.rec=[]; localStorage.removeItem('ytRecent'); recChips(); } else search(s.dataset.q); };
+Y('ytBody').onclick=e=>{ const c=e.target.closest('.ytCard'); if(c&&S.map[c.dataset.id]) return play(S.map[c.dataset.id]);
+  if(e.target.id==='ytBack') return S.cur.length?list('Back',S.cur):go(S.tab);
+  const sh=e.target.closest('[data-sh]'); if(sh){ S.si=(S.si+(+sh.dataset.sh)+S.sh.length)%S.sh.length; shortView(); } };
+const _o=openModal; openModal=function(id){ _o(id); if(id==='ytApp'){ recChips(); go(S.tab); } };
+})();
 
 /* ===== TV mode + QR / code sign-in ===== */
 (function(){
@@ -3084,7 +3126,7 @@ welcome();
   const css=document.createElement('style'); css.textContent='@media(min-width:800px){body.tv{zoom:1.3}}@media(max-width:799px){#tvLogin{flex-direction:column;gap:16px;justify-content:flex-start;padding-top:56px}#tvCode{font-size:32px}#tvLogin h1{font-size:22px}#tvLogin ol{font-size:16px!important}}body.tv :focus{outline:4px solid #ff9100!important;outline-offset:2px}#tvLogin{overflow:auto;position:fixed;inset:0;z-index:10000;background:#0c0202;color:#fff;display:none;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap;padding:24px}#tvLogin .box{background:#fff;padding:14px;border-radius:14px;width:244px;height:244px;display:flex;align-items:center;justify-content:center;margin:auto}#tvCode{font-size:44px;letter-spacing:8px;font-weight:700;text-align:center;margin-top:14px;color:#ffb300}';
   document.head.append(css);
   const ov=document.createElement('div'); ov.id='tvLogin';
-  ov.innerHTML='<div style="text-align:center"><div class="box" id="tvQr">QR…</div><div id="tvCode">······</div><div style="color:#aaa;margin-top:6px">Code is valid for 10 minutes</div></div><button class="btn gray" id="tvOff" style="position:absolute;top:12px;right:12px">✕ Not a TV – back to normal</button><div style="max-width:480px"><h1 style="margin:0 0 14px;color:#ff8a80">📺 Gemini OS on TV</h1><ol style="font-size:20px;line-height:1.7;padding-left:22px"><li>Scan the QR code with your phone camera.<br><small style="color:#aaa">Or open <b id="tvUrl"></b> on your phone → Settings → <i>TV</i> and type the code.</small></li><li>On your phone choose <b>Google</b>, <b>Login</b> or <b>Sign up</b>.</li><li>Tap <b>Approve</b> – this TV signs in by itself.</li></ol><button class="btn" id="tvHere" style="font-size:20px;padding:14px 24px;margin-top:8px">⌨ Log in on this TV instead</button></div>';
+  ov.innerHTML='<div style="text-align:center"><div class="box" id="tvQr">QR…</div><div id="tvCode">······</div><div style="color:#aaa;margin-top:6px">Code is valid for 10 minutes</div></div><button class="btn gray" id="tvOff" style="position:absolute;top:12px;right:12px">✕ Not a TV – back to normal</button><div style="max-width:480px"><h1 style="margin:0 0 14px;color:#ff8a80">📺 HP OS on TV</h1><ol style="font-size:20px;line-height:1.7;padding-left:22px"><li>Scan the QR code with your phone camera.<br><small style="color:#aaa">Or open <b id="tvUrl"></b> on your phone → Settings → <i>TV</i> and type the code.</small></li><li>On your phone choose <b>Google</b>, <b>Login</b> or <b>Sign up</b>.</li><li>Tap <b>Approve</b> – this TV signs in by itself.</li></ol><button class="btn" id="tvHere" style="font-size:20px;padding:14px 24px;margin-top:8px">⌨ Log in on this TV instead</button></div>';
   document.body.append(ov);
   const loadQR=(ok,fail)=>{ if(window.QRCode) return ok(); const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=ok; s.onerror=fail; document.head.append(s); };
   const want=()=>TVM&&!localStorage.getItem('token'), ask=()=>{ if(want()) socket.emit('tv_new'); };
@@ -3501,15 +3543,18 @@ function vaSay(text,done){ text=String(text||'').replace(/[*#`_>|~]/g,'').replac
   if(!window.speechSynthesis||!text){ end(); return; }
   try{ V.speaking=1; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang=vaLang.value; u.onend=end; u.onerror=end; speechSynthesis.speak(u); setTimeout(end,Math.min(30000,2500+text.length*90)); }catch(e){ end(); } }
 function vaStopMusic(){ vaNow.innerHTML=''; vaNow.style.display='none'; }
-function vaPlayItem(it){ vaNow.style.display='block'; vaNow.innerHTML='<div style="font-weight:bold;margin-bottom:6px">🎵 '+esc(it.title)+'</div><div style="position:relative;padding-top:56.25%"><iframe style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:8px" src="https://www.youtube-nocookie.com/embed/'+encodeURIComponent(it.id)+'?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe></div><small style="color:#888">If the music does not start, tap play on the video. Say "next song" or "stop".</small>'; }
-async function vaPlay(query){
-  let j; try{ const r=await fetch('/api/search?type=yt&q='+encodeURIComponent(query+' song'),{headers:{Authorization:'Bearer '+(localStorage.getItem('token')||'')}}); j=await r.json(); }catch(e){ j={error:'Search failed'}; }
+function vaPlayItem(it,mode){ mode=mode||V.mode||'audio'; vaNow.style.display='block'; const src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(it.id)+'?autoplay=1&rel=0&playsinline=1', al='autoplay; encrypted-media; fullscreen';
+  vaNow.innerHTML=mode==='video'?'<div style="font-weight:bold;margin-bottom:6px">🎬 '+esc(it.title)+'</div><div style="position:relative;padding-top:56.25%"><iframe style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:8px" src="'+src+'" allow="'+al+'" allowfullscreen></iframe></div><small style="color:#888">Say "stop", or "play" and a song name for music only.</small>'
+   :'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><iframe style="width:200px;height:200px;border:0;border-radius:12px;flex:none" src="'+src+'" allow="'+al+'"></iframe><div style="flex:1;min-width:140px"><div style="font-weight:bold">🎵 '+esc(it.title)+'</div><small style="color:#aaa">'+esc(it.by||'')+'</small><br><small style="color:#888">Song mode. Say "next song", "stop", or "play video of ..." to watch it.</small></div></div>'; }
+async function vaPlay(query,mode){ mode=mode||'audio'; V.mode=mode;
+  let j; try{ const r=await fetch('/api/search?type=yt&q='+encodeURIComponent(query+(mode==='video'?'':' official audio')),{headers:{Authorization:'Bearer '+(localStorage.getItem('token')||'')}}); j=await r.json(); }catch(e){ j={error:'Search failed'}; }
   if(!j||j.error||!(j.items||[]).length){ const link='https://www.youtube.com/results?search_query='+encodeURIComponent(query); vaNow.style.display='block'; vaNow.innerHTML='<a class="btn" target="_blank" rel="noopener noreferrer" href="'+esc(link)+'" style="text-decoration:none">▶ Open "'+esc(query)+'" on YouTube</a>';
     return vaSay(j&&j.error&&/not set up/i.test(j.error)?'I cannot search songs yet. The owner needs to add a YouTube key on Render. You can tap the button to open YouTube.':(j&&j.items&&!j.items.length?'I could not find that song.':'I could not search YouTube right now. You can tap the button to open it.')); }
-  V.res=j.items; V.idx=0; const it=V.res[0]; vaSay('Playing '+it.title,()=>vaPlayItem(it)); }
+  V.res=j.items; V.idx=0; const it=V.res[0]; vaSay((mode==='video'?'Playing video ':'Playing ')+it.title,()=>vaPlayItem(it,mode)); }
 function vaRun(cmd){ cmd=String(cmd||'').trim(); if(!cmd) return; vaAdd('user',cmd); const l=cmd.toLowerCase().replace(/[.!?]+$/,''); let m;
   if(/^(?:please\s+)?(?:stop|pause|quiet|silence|stop (?:the )?(?:music|song|video|playing)|turn off (?:the )?music)$/.test(l)||/^(?:रुको|बंद करो|बंद कर)$/.test(l)){ vaStopMusic(); try{ speechSynthesis.cancel(); }catch(e){} return vaSay('Okay, stopped.'); }
   if(/^(?:next|skip|next song|play (?:the )?next(?: song)?|play another(?: song)?)$/.test(l)){ if(!V.res.length) return vaSay('Nothing is playing yet. Say play, then a song name.'); V.idx=(V.idx+1)%V.res.length; const it=V.res[V.idx]; return vaSay('Next: '+it.title,()=>vaPlayItem(it)); }
+  if((m=/^(?:please\s+)?(?:play|watch|show(?: me)?)\s+(?:a\s+|the\s+)?video(?:\s+(?:of|about|for|on))?\s+(.+)$/.exec(l)||/^(?:please\s+)?(?:play|watch|show(?: me)?)\s+(.+?)\s+video$/.exec(l)||/^(?:please\s+)?watch\s+(.+)$/.exec(l))) return vaPlay(m[1].trim(),'video');
   if((m=/^(?:please\s+)?play\s+(.+)$/.exec(l))){ const s=m[1].replace(/\s+(?:on youtube|for me|please)$/,'').replace(/\s+song$/,'').trim(); if(s) return vaPlay(s); }
   if(/\bwhat(?:'s| is)?\s+the\s+time\b|\btime\s+is\s+it\b|\bcurrent time\b|\btell me the time\b/.test(l)) return vaSay('It is '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})+'.');
   if(/\bwhat(?:'s| is)?\s+(?:the\s+)?(?:today'?s\s+)?date\b|\bwhat day is (?:it|today)\b|\btoday'?s date\b/.test(l)) return vaSay('Today is '+new Date().toLocaleDateString([],{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'.');
