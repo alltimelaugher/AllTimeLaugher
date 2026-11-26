@@ -3489,7 +3489,8 @@ function hcDraw(){ const R=HC, c=$('hcCv').getContext('2d'), W=480, H=270, amp=R
 /* AI Studio: Education / Creativity / Coding / Images / Video (free AI keys on the server) */
 try{
 const stBody=el('div',{});
-stBody.innerHTML='<div id="stTabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div><div id="stHint" style="color:#aaa;font-size:13px;margin-bottom:6px"></div><div id="stLog" style="min-height:240px;max-height:55vh;overflow:auto;padding:4px"></div><div id="stBar" style="display:flex;gap:6px;margin-top:8px"><textarea id="stIn" rows="2" style="flex:1;resize:vertical"></textarea><button class="btn green" id="stSend">Send</button></div><div id="stVid" style="display:none"></div>';
+stBody.innerHTML='<div id="stWrap"><div id="stSide"><div class="stT">✦ AI Studio</div><div id="stTabs"></div></div><div id="stMain"><div id="stHint"></div><div id="stLog"></div><div id="stBar"><textarea id="stIn" rows="1"></textarea><button class="gmB" id="stSend" style="background:var(--ac);color:#fff">➤</button></div><div id="stNote">AI can make mistakes, so double-check important info.</div><div id="stVid" style="display:none"></div></div></div>';
+{ const sc=document.createElement('style'); sc.textContent=`#stApp .modal-body{padding:0;overflow:hidden}#stWrap{display:flex;height:100%}#stSide{width:210px;flex:none;border-right:1px solid var(--bd);background:var(--pn);padding:10px 8px;overflow-y:auto}.stT{font-weight:bold;font-size:17px;padding:6px 10px 12px;background:linear-gradient(90deg,#6ea8ff,#c58bff,#ff8a8a);-webkit-background-clip:text;background-clip:text;color:transparent}#stMain{flex:1;min-width:0;display:flex;flex-direction:column}#stHint{padding:10px 14px 0;color:#b99;font-size:13px}#stLog{flex:1;overflow-y:auto;padding:12px 14px}#stVid{padding:14px;overflow:auto}#stBar{margin:0 12px;padding:6px 8px;border:1px solid var(--bd);border-radius:28px;background:#1a0505;align-items:center;gap:6px;display:flex}#stIn{flex:1;resize:none;max-height:140px;border:0;background:transparent;color:#fff;font:inherit;outline:0;padding:8px}#stNote{font-size:11px;line-height:1.3;color:#a98080;text-align:center;padding:6px 12px 10px}@media(max-width:800px){#stWrap{flex-direction:column}#stSide{width:auto;border-right:0;border-bottom:1px solid var(--bd);padding:6px}.stT{display:none}#stTabs{display:flex;gap:6px;overflow-x:auto}#stTabs .gmCh{white-space:nowrap;flex:none}}`; document.head.append(sc); }
 mkApp('stApp','AI Studio','🧩','AI Studio',stBody);
 const ST=[
  {k:'edu',i:'🎓',n:'Education',h:'Your personal teacher. Ask about any school or learning topic and get step-by-step answers.',ph:'e.g. Explain photosynthesis simply, or help me solve 2x + 5 = 17'},
@@ -3498,26 +3499,29 @@ const ST=[
  {k:'image',i:'🖼️',n:'Images',h:'Describe a picture and the AI creates it.',ph:'e.g. A red sports car on a mountain road at sunset, digital art'},
  {k:'video',i:'🎬',n:'Video',h:'',ph:''}];
 const STM={edu:[],creative:[],code:[],image:[]}, STV=[['Kling AI','https://klingai.com','Free daily credits, short clips'],['Dreamina','https://dreamina.capcut.com','Free daily credits for images and video'],['Pika','https://pika.art','Free credits when you sign up'],['Wan on Hugging Face','https://huggingface.co/spaces','Open-source video models, free but can have queues']];
-let stMode='edu', stBusy=0, stTyp=null;
-const stLog=stBody.querySelector('#stLog'), stIn=stBody.querySelector('#stIn'), stBar=stBody.querySelector('#stBar'), stVid=stBody.querySelector('#stVid'), stHint=stBody.querySelector('#stHint'), stTabs=stBody.querySelector('#stTabs');
+ST.unshift(ST.splice(3,1)[0]);
+const SUG={image:['A red sports car on a mountain road at sunset','A cute robot painting a rainbow','A cozy tiny house in a snowy forest'],edu:['Explain photosynthesis simply','Help me solve 2x + 5 = 17','Teach me the basics of electricity'],creative:['Write a short story about a robot who learns to paint','Give me 10 funny names for a pet parrot','Write a poem about the monsoon'],code:['Write a JavaScript function that checks if a word is a palindrome','Explain what an API is with an example','Find the bug in my code']};
+let stMode='image', stBusy=0, stTyp=null;
+const stLog=stBody.querySelector('#stLog'), stIn=stBody.querySelector('#stIn'), stBar=stBody.querySelector('#stBar'), stVid=stBody.querySelector('#stVid'), stHint=stBody.querySelector('#stHint'), stTabs=stBody.querySelector('#stTabs'), stNote=stBody.querySelector('#stNote');
 function stBubble(m){ const d=document.createElement('div');
   if(m.role==='user'){ d.className='gmU'; d.textContent=m.content; }
   else{ d.className='gmA'; d.innerHTML=(window.aiMd||esc)(m.content||''); if(m.img){ const i=new Image(); i.src=m.img; i.className='gmImg'; d.append(i); const a=document.createElement('a'); a.href=m.img; a.download='hp-os-image.png'; a.textContent='⬇ Download'; a.style.cssText='display:inline-block;margin-top:6px;color:#ffb74d'; d.append(a); } }
   stLog.append(d); stLog.scrollTop=1e9; return d; }
 function stRender(){ stTabs.innerHTML='';
-  ST.forEach(t=>{ const b=document.createElement('button'); b.className='btn sm'+(t.k===stMode?'':' gray'); b.textContent=t.i+' '+t.n; b.onclick=()=>{ stMode=t.k; stRender(); }; stTabs.append(b); });
+  ST.forEach(t=>{ const b=document.createElement('div'); b.className='gmCh'+(t.k===stMode?' act':''); b.innerHTML='<span>'+t.i+' '+t.n+'</span>'; b.onclick=()=>{ stMode=t.k; stRender(); }; stTabs.append(b); });
   const cur=ST.find(t=>t.k===stMode), isV=stMode==='video';
-  if(!isV){ const n=document.createElement('button'); n.className='btn sm gray'; n.textContent='🗑 Clear'; n.onclick=()=>{ STM[stMode]=[]; stRender(); }; stTabs.append(n); }
-  stHint.textContent=isV?'':cur.h; stLog.style.display=stBar.style.display=isV?'none':''; stVid.style.display=isV?'block':'none'; stIn.placeholder=cur.ph||'';
+  if(!isV){ const n=document.createElement('div'); n.className='gmCh'; n.innerHTML='<span>🗑 Clear chat</span>'; n.onclick=()=>{ STM[stMode]=[]; stRender(); }; stTabs.append(n); }
+  stHint.textContent=isV?'':cur.h; stLog.style.display=stBar.style.display=stNote.style.display=isV?'none':''; stVid.style.display=isV?'block':'none'; stIn.placeholder=isV?'':(stMode==='image'?'Describe the image to create…':'Ask about '+cur.n.toLowerCase());
   if(isV){ stVid.innerHTML='<p style="color:#ccc">Free video making is not possible inside this app, because there is no free video API. These free websites can make short clips for you. Open one, sign in and type your idea. Free limits change, and free clips are usually only a few seconds long.</p>';
     STV.forEach(([n,u,d])=>{ const a=document.createElement('a'); a.href=u; a.target='_blank'; a.rel='noopener noreferrer'; a.className='btn'; a.style.cssText='display:block;margin:8px 0;text-align:left;text-decoration:none'; a.innerHTML='🎬 <b>'+esc(n)+'</b><br><small>'+esc(d)+'</small>'; stVid.append(a); }); return; }
-  stLog.innerHTML=''; if(!STM[stMode].length){ const w=document.createElement('div'); w.className='gmA'; w.style.color='#aaa'; w.textContent='Type below to start.'; stLog.append(w); } else STM[stMode].forEach(stBubble); }
+  stLog.innerHTML=''; if(!STM[stMode].length){ const w=document.createElement('div'); w.className='gmA gmHi'; w.innerHTML='<h2>'+cur.i+' '+cur.n+'</h2><p>What would you like to do?</p>';
+    const c=document.createElement('div'); c.className='gmChips'; (SUG[stMode]||[]).forEach(t=>{ const b=document.createElement('button'); b.textContent=t; b.onclick=()=>{ stIn.value=t; stSend(); }; c.append(b); }); w.append(c); stLog.append(w); } else STM[stMode].forEach(stBubble); }
 function stSend(){ if(stBusy||stMode==='video') return; const text=stIn.value.trim(); if(!text) return; const mode=stMode, hist=STM[mode].filter(m=>!m.err).map(m=>({role:m.role,content:m.content}));
   if(!STM[mode].length) stLog.innerHTML=''; const um={role:'user',content:text}; STM[mode].push(um); stBubble(um); stIn.value=''; stBusy=1;
   stTyp=document.createElement('div'); stTyp.className='gmA'; stTyp.style.color='#aaa'; stTyp.textContent=mode==='image'?'🖼️ Creating your image… this can take up to a minute':'⏳ Thinking…'; stLog.append(stTyp); stLog.scrollTop=1e9;
   socket.emit('studio_ask',{mode,text,hist:mode==='image'?[]:hist}); }
 stBody.querySelector('#stSend').addEventListener('click',stSend);
-stIn.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); stSend(); } });
+stIn.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey&&innerWidth>800){ e.preventDefault(); stSend(); } });
 socket.on('studio_reply',r=>{ const mode=r&&r.mode; if(!STM[mode]) return; stBusy=0; if(stTyp){ stTyp.remove(); stTyp=null; }
   const m=r.err?{role:'assistant',content:'⚠️ '+r.err,err:1}:{role:'assistant',content:r.text||'',img:r.img||''}; STM[mode].push(m); while(STM[mode].length>30) STM[mode].shift();
   if(stMode===mode){ if(STM[mode].length===1) stLog.innerHTML=''; stBubble(m); } });
