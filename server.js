@@ -520,7 +520,7 @@ app.get('/manifest.webmanifest', (req, res) => {
   res.json({
     id: '/', name: 'HP OS', short_name: 'HP OS', description: 'Chat, calls, games and live screen sharing',
     start_url: '/', scope: '/', display: 'standalone', orientation: 'any',
-    background_color: '#0c0202', theme_color: '#0c0202',
+    background_color: '#000000', theme_color: '#000000',
     icons: [
       { src: '/icon-192.png?v=2', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: '/icon-512.png?v=2', sizes: '512x512', type: 'image/png', purpose: 'any' },
@@ -543,7 +543,7 @@ self.addEventListener('notificationclick',e=>{ e.notification.close(); const d=e
     if(cs.length){ cs[0].focus(); cs[0].postMessage({type:'chat',from:d.from}); } else await clients.openWindow('/?chat='+encodeURIComponent(d.from||'')); })()); });`;
 app.get('/sw.js', (req, res) => { res.set('Content-Type', 'application/javascript'); res.set('Cache-Control', 'no-store'); const f = path.join(__dirname, 'sw.js'); if (process.env.CUSTOM_SW === '1' && fs.existsSync(f)) res.sendFile(f); else res.send(SW_FALLBACK); });
 app.get('/vapid', (req, res) => { res.set('Access-Control-Allow-Origin', '*'); res.json({ key: pushOn ? process.env.VAPID_PUBLIC : '' }); });
-app.get('/config', (req, res) => { res.set('Access-Control-Allow-Origin', '*'); res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || '', persistent: !!M, phone: PHONE_ON }); });
+app.get('/config', (req, res) => { res.set('Access-Control-Allow-Origin', '*'); res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || '', persistent: !!M, phone: PHONE_ON, mapsKey: process.env.GOOGLE_MAPS_KEY || '' }); });
 // ---- In-app YouTube + Google search through the official APIs (needs keys on Render) ----
 const searchHits = {};
 const decodeHtml = s => String(s || '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -564,6 +564,19 @@ app.get('/api/search', async (req, res) => {
       if (j.error) return res.json({ error: j.error.message || 'YouTube API error' });
       return res.json({ items: (j.items || []).filter(i => i.id && i.id.videoId).map(i => ({ id: i.id.videoId, title: decodeHtml(i.snippet.title), by: decodeHtml(i.snippet.channelTitle), img: (i.snippet.thumbnails.medium || {}).url })) });
     }
+    const stripTags = x => decodeHtml(String(x || '').replace(/<[^>]*>/g, ''));
+    if (process.env.SERPER_API_KEY) { // Google results through serper.dev
+      const r = await fetch('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ q, num: 10 }) });
+      const j = await r.json();
+      if (!r.ok) return res.json({ error: (j && j.message) || 'Search service error' });
+      return res.json({ src: 'Google', items: (j.organic || []).filter(i => i.link).map(i => ({ title: stripTags(i.title), link: i.link, snippet: stripTags(i.snippet) })) });
+    }
+    if (process.env.BRAVE_API_KEY) { // Brave Search API
+      const r = await fetch('https://api.search.brave.com/res/v1/web/search?count=10&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json', 'X-Subscription-Token': process.env.BRAVE_API_KEY } });
+      const j = await r.json();
+      if (!r.ok) return res.json({ error: (j && j.error && j.error.detail) || 'Search service error' });
+      return res.json({ src: 'Brave', items: ((j.web && j.web.results) || []).filter(i => i.url).map(i => ({ title: stripTags(i.title), link: i.url, snippet: stripTags(i.description) })) });
+    }
     if (!process.env.GOOGLE_CSE_KEY || !process.env.GOOGLE_CSE_ID) return res.json({ error: 'Google search is not set up yet (owner: add GOOGLE_CSE_KEY and GOOGLE_CSE_ID on Render).' });
     const r = await fetch('https://www.googleapis.com/customsearch/v1?num=10&key=' + process.env.GOOGLE_CSE_KEY + '&cx=' + process.env.GOOGLE_CSE_ID + '&q=' + encodeURIComponent(q));
     const j = await r.json();
@@ -571,6 +584,145 @@ app.get('/api/search', async (req, res) => {
     res.json({ items: (j.items || []).map(i => ({ title: decodeHtml(i.title), link: i.link, snippet: decodeHtml(i.snippet) })) });
   } catch (e) { res.json({ error: 'Search failed. Try again.' }); }
 });
+
+// ==== IN-APP BROWSER PROXY BEGIN ====
+// The app's Browser asks THIS server to fetch a website and shows it in a sandboxed frame, so sites that forbid
+// being embedded still open inside the app. Safety rules:
+//  - only logged-in users, 60 pages per minute each
+//  - never reaches private/internal addresses (checked again when the connection is made)
+//  - sign-in, banking and social sites are refused (those passwords must never pass through this server)
+//  - pages run in a sandbox with no access to the app's storage or login token
+const dnsMod = require('dns'), netMod = require('net'), zlibMod = require('zlib'), httpsMod = require('https');
+const PROXY_TEST_ALLOW = false;
+const PROXY_MAX = 8 * 1024 * 1024;
+const PROXY_UA = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
+const PROXY_BLOCK = /(^|\.)(accounts\.google\.com|mail\.google\.com|myaccount\.google\.com|gmail\.com|facebook\.com|instagram\.com|whatsapp\.com|x\.com|twitter\.com|paypal\.com|netflix\.com|spotify\.com|discord\.com|outlook\.com|live\.com|microsoftonline\.com|appleid\.apple\.com|icloud\.com|amazon\.[a-z.]+|github\.com|tiktok\.com|twitch\.tv|linkedin\.com|reddit\.com|youtube\.com)$/i;
+const proxyHits = {};
+const escProxy = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function privateIp(ip) {
+  if (PROXY_TEST_ALLOW) return false;
+  ip = String(ip).toLowerCase();
+  if (netMod.isIPv4(ip)) {
+    const p = ip.split('.').map(Number);
+    return p[0] === 0 || p[0] === 10 || p[0] === 127 || (p[0] === 100 && p[1] >= 64 && p[1] <= 127) || (p[0] === 169 && p[1] === 254) ||
+      (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 0) || (p[0] === 192 && p[1] === 168) ||
+      (p[0] === 198 && (p[1] === 18 || p[1] === 19)) || p[0] >= 224;
+  }
+  if (netMod.isIPv6(ip)) {
+    if (ip === '::' || ip === '::1') return true;
+    let m = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (m) return privateIp(m[1]);
+    m = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (m) { const a = parseInt(m[1], 16), b = parseInt(m[2], 16); return privateIp([a >> 8, a & 255, b >> 8, b & 255].join('.')); }
+    return /^(fc|fd|fe[89ab]|ff)/.test(ip) || ip.startsWith('64:ff9b') || ip.startsWith('2001:db8');
+  }
+  return true;
+}
+function safeLookup(host, opts, cb) {
+  if (typeof opts === 'function') { cb = opts; opts = {}; }
+  dnsMod.lookup(host, opts, (err, addr, fam) => {
+    if (err) return cb(err);
+    const list = Array.isArray(addr) ? addr : [{ address: addr, family: fam }];
+    if (!list.length || list.some(a => privateIp(a.address))) return cb(new Error('That address is not allowed'));
+    cb(null, addr, fam);
+  });
+}
+function checkTarget(u) {
+  const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (PROXY_BLOCK.test(host)) return 'blocked';
+  if (PROXY_TEST_ALLOW) return '';
+  if (!/^https?:$/.test(u.protocol)) return 'Only http and https addresses work';
+  if (u.username || u.password) return 'Addresses with a password in them are not allowed';
+  if (u.port && u.port !== '80' && u.port !== '443') return 'That port is not allowed';
+  if (netMod.isIP(host)) return privateIp(host) ? 'That address is not allowed' : '';
+  if (!host.includes('.') || /\.(local|localhost|internal|lan|home|corp|intranet)$/.test(host)) return 'That address is not allowed';
+  return '';
+}
+function proxyGet(urlObj, hops) {
+  hops = hops || 0;
+  return new Promise((resolve, reject) => {
+    const lib = urlObj.protocol === 'https:' ? httpsMod : http;
+    const req = lib.request(urlObj, {
+      method: 'GET', lookup: safeLookup, timeout: 12000,
+      headers: { 'User-Agent': PROXY_UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9', 'Accept-Encoding': 'gzip, deflate, br' }
+    }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        res.resume();
+        if (hops >= 5) return reject(new Error('Too many redirects'));
+        let next; try { next = new URL(res.headers.location, urlObj); } catch (e) { return reject(new Error('Bad redirect')); }
+        const bad = checkTarget(next); if (bad) return reject(new Error(bad === 'blocked' ? 'This site redirected to a sign-in site, which is not allowed here' : bad));
+        return proxyGet(next, hops + 1).then(resolve, reject);
+      }
+      const chunks = []; let size = 0;
+      res.on('data', c => { size += c.length; if (size > PROXY_MAX) req.destroy(new Error('That page is too large')); else chunks.push(c); });
+      res.on('end', () => resolve({ res, body: Buffer.concat(chunks), url: urlObj }));
+      res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('That site took too long to answer')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+function proxyInflate(body, enc) {
+  enc = String(enc || '').toLowerCase();
+  const o = { maxOutputLength: PROXY_MAX };
+  try {
+    if (enc === 'gzip' || enc === 'x-gzip') return zlibMod.gunzipSync(body, o);
+    if (enc === 'deflate') return zlibMod.inflateSync(body, o);
+    if (enc === 'br') return zlibMod.brotliDecompressSync(body, o);
+  } catch (e) { throw new Error('Could not read that page'); }
+  return body;
+}
+const proxyPage = (title, msg) => '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#000;color:#ddd;font-family:system-ui,sans-serif;padding:28px;text-align:center"><h3>' + escProxy(title) + '</h3><p style="color:#999;font-size:14px;line-height:1.5">' + escProxy(msg) + '</p></body>';
+function proxyClientJs(finalUrl) {
+  return '(function(){var F=' + JSON.stringify(finalUrl).replace(/</g, '\\u003c') + ';' +
+    'function go(u){try{parent.postMessage({brnav:u},"*")}catch(e){}}' +
+    'function note(t){try{parent.postMessage({brnote:t},"*")}catch(e){}}' +
+    'document.addEventListener("click",function(e){if(e.defaultPrevented)return;var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var raw=a.getAttribute("href")||"";' +
+    'if(raw.charAt(0)==="#"){e.preventDefault();var id=raw.slice(1);try{id=decodeURIComponent(id)}catch(x){}var el=id?(document.getElementById(id)||document.getElementsByName(id)[0]):null;if(el)el.scrollIntoView();else window.scrollTo(0,0);return}' +
+    'if(/^(javascript|mailto|tel|data|blob):/i.test(raw))return;if(!/^https?:/i.test(a.href))return;e.preventDefault();go(a.href)},true);' +
+    'document.addEventListener("submit",function(e){var f=e.target;if(!f||f.tagName!=="FORM")return;e.preventDefault();' +
+    'if((f.getAttribute("method")||"get").toLowerCase()!=="get"){note("Forms that send data (logins, uploads) do not work in this browser.");return}' +
+    'try{var u=new URL(f.action||F);var p=new URLSearchParams();new FormData(f).forEach(function(v,k){if(typeof v==="string")p.append(k,v)});u.search=p.toString();go(u.href)}catch(x){}},true);' +
+    'window.open=function(u){try{go(new URL(u,F).href)}catch(e){}return null};' +
+    'addEventListener("load",function(){try{parent.postMessage({brinfo:{url:F,title:document.title}},"*")}catch(e){}});})();';
+}
+app.get('/proxy', async (req, res) => {
+  res.set({
+    'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+    'Content-Security-Policy': 'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox'
+  });
+  const name = nameOfToken(String(req.query.t || ''));
+  if (!name) return res.status(401).send(proxyPage('Please log in', 'Log in to the app first, then open the website again.'));
+  const now = Date.now(), h = (proxyHits[name] = (proxyHits[name] || []).filter(t => now - t < 60000));
+  if (h.length >= 60) return res.status(429).send(proxyPage('Slow down', 'Too many pages in a minute. Wait a little and try again.'));
+  h.push(now);
+  let target; try { target = new URL(String(req.query.u || '').slice(0, 2000)); } catch (e) { return res.status(400).send(proxyPage('Invalid address', 'That web address is not valid.')); }
+  const bad = checkTarget(target);
+  if (bad === 'blocked') return res.status(403).send(proxyPage('Opened outside the app', 'For your safety, sign-in, banking and social sites do not open inside this browser. Use the phone browser for them.'));
+  if (bad) return res.status(400).send(proxyPage('Cannot open', bad));
+  try {
+    const r = await proxyGet(target);
+    const ct = String(r.res.headers['content-type'] || 'application/octet-stream');
+    const body = proxyInflate(r.body, r.res.headers['content-encoding']);
+    if (/html/i.test(ct)) {
+      let label = (ct.match(/charset=["']?([\w-]+)/i) || [])[1];
+      if (!label) label = (body.slice(0, 3000).toString('latin1').match(/<meta[^>]+charset=["']?([\w-]+)/i) || [])[1] || 'utf-8';
+      let html; try { html = new TextDecoder(label).decode(body); } catch (e) { html = body.toString('utf8'); }
+      html = html.replace(/<meta[^>]+http-equiv\s*=\s*["']?(?:content-security-policy|x-frame-options|refresh)["']?[^>]*>/gi, '');
+      let inject = '<base href="' + escProxy(r.url.href) + '">';
+      if (!/<meta[^>]+name=["']?viewport/i.test(html)) inject += '<meta name="viewport" content="width=device-width,initial-scale=1">';
+      inject += '<script>' + proxyClientJs(r.url.href) + '</script>';
+      html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + inject) : inject + html;
+      return res.status(r.res.statusCode || 200).type('text/html; charset=utf-8').send(html);
+    }
+    if (/^(image|video|audio)\/|^application\/pdf|^text\/plain/i.test(ct)) { res.set('Content-Type', ct); return res.send(body); }
+    return res.status(415).send(proxyPage('Downloads are not supported', 'This link is a file download, not a web page.'));
+  } catch (e) {
+    return res.status(502).send(proxyPage('Could not open this page', String(e.message || 'The site did not answer') + '. Some sites block servers; the ↗ button opens it in your phone browser.'));
+  }
+});
+// ==== IN-APP BROWSER PROXY END ====
 
 app.get('/avatar/:name', (req, res) => {
   const n = findUser(req.params.name), a = n && hasOwn(db.profiles, n) && db.profiles[n].avatar;
