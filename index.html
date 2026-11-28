@@ -689,6 +689,14 @@ html,body{overflow:hidden;overscroll-behavior:none}
     <div style="margin-top:8px;font-size:13px">Auto-lock after <select id="lkAuto" onchange="lkSet('lkAuto',this.value)"><option value="0">Never</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="15">15 minutes</option></select></div>
     <label style="display:block;font-size:13px;margin-top:6px"><input type="checkbox" id="lkLeave" onchange="lkSet('lkLeave',this.checked?'1':'0')"> Lock when I leave the app for 30+ seconds</label>
     <label style="display:block;font-size:13px;margin-top:4px"><input type="checkbox" id="lkOpen" onchange="lkSet('lkOpen',this.checked?'1':'0')"> Lock when the app is opened</label>
+    <h4 style="margin-top:16px">🖐 Fingerprint / face unlock</h4>
+    <div id="fpState" style="font-size:13px;color:#aaa;margin-bottom:8px"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn green" onclick="fpEnable()">🖐 Turn on fingerprint</button>
+      <button class="btn gray" onclick="fpDisable()">Turn off</button>
+      <button class="btn" onclick="fpTest()">🧪 Test</button>
+    </div>
+    <p style="color:#888;font-size:12px">Uses your phone's own fingerprint sensor (or face / screen lock). The app never sees your fingerprint. Needs a PIN first (PIN stays as backup) and works only on the https site.</p>
     <p style="color:#888;font-size:12px">The PIN is saved only on this device. It stops people using the app on your phone; it is a screen lock, not encryption.</p>
     <h4>🌐 Browser</h4>
     <div style="font-size:13px;margin-bottom:6px">Search engine <select id="setEngine" onchange="brSetEngine(this.value)"></select></div>
@@ -697,6 +705,13 @@ html,body{overflow:hidden;overscroll-behavior:none}
     <p style="color:#888;font-size:12px">Google-style results need a search key on Render (SERPER_API_KEY, or BRAVE_API_KEY). Without one the browser shows DuckDuckGo results. Logging in to websites does not work inside the app browser.</p>
     <h4>🗺️ Maps</h4>
     <label style="display:block;font-size:13px"><input type="checkbox" id="setMapDark" onchange="mpSetDark(this.checked)"> Dark map</label>
+    <div id="mapKeyState" style="font-size:13px;color:#aaa;margin:10px 0 6px"></div>
+    <input type="password" id="mapKeyIn" autocomplete="off" placeholder="Paste Google Maps API key (AIza...)" style="width:100%;margin-bottom:6px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn green" onclick="mapKeySave()">💾 Save &amp; enable Google Maps</button>
+      <button class="btn gray" onclick="mapKeyRemove()">Use free map</button>
+    </div>
+    <p style="color:#888;font-size:12px">In Google Cloud Console enable <b>Maps JavaScript API</b>, <b>Geocoding API</b> and <b>Routes API</b>, then restrict the key to this website address. The key is saved only on this device. Without a key the free OpenStreetMap map is used.</p>
     <h4>🔔 Notifications</h4>
     <div id="notifStatus" style="font-size:13px;color:#ffb300;margin-bottom:8px"></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -3947,7 +3962,7 @@ const _omH=openModal; openModal=function(id){ _omH(id); if(id==='chatApp') markS
   <div id="lkTop"><div id="lkTime">--:--</div><div id="lkDate"></div><div id="lkNote"></div></div>
   <div id="lkBottom">
     <div id="lkSwipe"><div class="bar"></div><span>Swipe up to unlock</span></div>
-    <div id="lkPinBox" style="display:none"><div id="lkDots"></div><div id="lkMsg"></div><div id="lkPad"></div><div id="lkLinks"><button type="button" id="lkCancel">Cancel</button><button type="button" id="lkForgot">Forgot PIN?</button></div></div>
+    <div id="lkPinBox" style="display:none"><div id="lkDots"></div><div id="lkMsg"></div><div id="lkPad"></div><div id="lkLinks"><button type="button" id="lkCancel">Cancel</button><button type="button" id="lkFp" style="display:none;font-size:22px">🖐</button><button type="button" id="lkForgot">Forgot PIN?</button></div></div>
   </div>
 </div>
 <script>
@@ -3970,7 +3985,7 @@ window.mpToggleDark=function(){ window.mpSetDark(!MP.dark); };
 window.openMaps=async function(){
   openModal('mapsModal');
   if(!MP.map){
-    try{ KEY=(await (await fetch('/config')).json()).mapsKey||''; }catch(e){}
+    try{ KEY=(localStorage.getItem('mapsKey')||'').trim()||(await (await fetch('/config')).json()).mapsKey||''; }catch(e){ KEY=(localStorage.getItem('mapsKey')||'').trim(); }
     if(KEY){ try{ await loadGoogle(KEY); MP.g=true; }catch(e){ toast(e.message+' Using the free map instead.'); } }
     if(!MP.g){ try{ await loadLeaflet(); }catch(e){ return toast(e.message); } }
     if(MP.g){
@@ -4074,7 +4089,29 @@ function clock(){
   $('lkNote').textContent=n?'💬 '+n+' unread message'+(n>1?'s':''):'';
 }
 function dots(){ const n=(pinData()||{}).n||4; $('lkDots').innerHTML=Array.from({length:n},(_,i)=>'<i class="'+(i<entered.length?'on':'')+'"></i>').join(''); }
-function showPad(){ $('lkSwipe').style.display='none'; $('lkPinBox').style.display='block'; entered=''; $('lkMsg').textContent=''; dots(); }
+function showPad(){ $('lkSwipe').style.display='none'; $('lkPinBox').style.display='block'; entered=''; $('lkMsg').textContent=''; dots(); fpShowBtn(); if(fpOn()) setTimeout(fpUnlock,250); }
+
+/* ---- fingerprint (WebAuthn platform authenticator: Android fingerprint / face / screen lock) ---- */
+const b64=u=>btoa(String.fromCharCode(...new Uint8Array(u))), unb64=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
+const fpOn=()=>!!LS.getItem('lkFp')&&hasPin();
+const fpOk=()=>!!(window.PublicKeyCredential&&navigator.credentials&&window.isSecureContext);
+function fpShowBtn(){ const b=$('lkFp'); if(b) b.style.display=fpOn()?'':'none'; }
+async function fpAsk(){
+  const id=unb64(LS.getItem('lkFp'));
+  await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id,transports:['internal']}],userVerification:'required',timeout:60000,rpId:location.hostname}});
+}
+async function fpUnlock(){ if(!shown||!fpOn()) return; try{ await fpAsk(); unlock(); }catch(e){ $('lkMsg').textContent='Fingerprint not recognised. Use your PIN or tap 🖐 again.'; } }
+window.fpEnable=async function(){
+  if(!hasPin()) return toast('Set a PIN first, fingerprint works together with it');
+  if(!fpOk()) return toast('Fingerprint needs the https site in a browser that supports it');
+  try{
+    if(window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable&&!(await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())) return toast('No fingerprint / screen lock found on this device. Add one in phone Settings first');
+    const cred=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'HP OS',id:location.hostname},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:'hp-os-lock',displayName:'HP OS lock'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'discouraged'},timeout:60000}});
+    LS.setItem('lkFp',b64(cred.rawId)); lkRefresh(); toast('🖐 Fingerprint unlock is on');
+  }catch(e){ toast('Fingerprint was not turned on ('+(e.name==='NotAllowedError'?'cancelled':e.message||e.name)+')'); }
+};
+window.fpDisable=function(){ LS.removeItem('lkFp'); lkRefresh(); toast('Fingerprint unlock is off'); };
+window.fpTest=async function(){ if(!fpOn()) return toast('Turn on fingerprint first'); try{ await fpAsk(); toast('✅ Fingerprint works'); }catch(e){ toast('Fingerprint check failed or was cancelled'); } };
 function showSwipe(){ $('lkSwipe').style.display=''; $('lkPinBox').style.display='none'; entered=''; }
 window.lockNow=function(){
   const s=$('lockScr'); s.classList.remove('up'); s.style.display='flex'; shown=true; showSwipe(); clock();
@@ -4102,7 +4139,7 @@ function back(){ if(Date.now()<until) return; entered=entered.slice(0,-1); dots(
 (function build(){
   $('lkPad').innerHTML=['1','2','3','4','5','6','7','8','9','','0','⌫'].map(k=>k===''?'<span></span>':'<button type="button" data-k="'+k+'">'+k+'</button>').join('');
   $('lkPad').addEventListener('click',e=>{ const k=e.target.closest('button'); if(!k) return; k.dataset.k==='⌫'?back():digit(k.dataset.k); });
-  $('lkCancel').onclick=showSwipe;
+  $('lkCancel').onclick=showSwipe; $('lkFp').onclick=fpUnlock;
   $('lkForgot').onclick=async()=>{
     if(!confirm('Forgot your PIN? The only way in is to sign out. Your messages stay on your account and you can sign back in with your password.')) return;
     try{ await logout(); }catch(e){}
@@ -4125,7 +4162,7 @@ window.lkSet=function(k,v){ LS.setItem(k,v); bump(); };
 function lkRefresh(){
   const p=hasPin(); $('lkSetState').textContent=p?'🔒 PIN is on for this device.':'No PIN yet. Without a PIN, the lock screen only needs a swipe.';
   $('lkCur').style.display=p?'':'none'; $('lkCur').value=$('lkNew').value=$('lkNew2').value='';
-  $('lkAuto').value=g('lkAuto','0'); $('lkLeave').checked=g('lkLeave','1')==='1'; $('lkOpen').checked=g('lkOpen','1')==='1';
+  if($('fpState')) $('fpState').textContent=!hasPin()?'Set a PIN above first.':!fpOk()?'Not available here (needs https + a supporting browser).':fpOn()?'🖐 Fingerprint unlock is ON for this device.':'Fingerprint unlock is off.'; fpShowBtn(); $('lkAuto').value=g('lkAuto','0'); $('lkLeave').checked=g('lkLeave','1')==='1'; $('lkOpen').checked=g('lkOpen','1')==='1';
 }
 window.lkSavePin=async function(){
   const a=$('lkNew').value.trim(), b=$('lkNew2').value.trim();
@@ -4137,11 +4174,50 @@ window.lkSavePin=async function(){
 window.lkRemovePin=async function(){
   if(!hasPin()) return toast('No PIN is set');
   if(!(await pinOk($('lkCur').value.trim()))) return toast('Enter your current PIN first');
-  LS.removeItem('lkPin'); LS.removeItem('lkLocked'); lkRefresh(); toast('PIN removed');
+  LS.removeItem('lkPin'); LS.removeItem('lkLocked'); LS.removeItem('lkFp'); lkRefresh(); toast('PIN removed');
 };
 const _om=openModal; openModal=function(id){ _om(id); if(id==='settingsModal') lkRefresh(); };
 lkRefresh(); bump();
 if(hasPin()&&(g('lkOpen','1')==='1'||g('lkLocked','')==='1')) window.lockNow();
+})();
+</script>
+<script>
+/* ================= MAPS KEY (Settings) ================= */
+(function(){
+const $=id=>document.getElementById(id);
+function st(){ const k=(localStorage.getItem('mapsKey')||'').trim(), e=$('mapKeyState'); if(e) e.textContent=k?'🗺️ Google Maps is ON (your key, ending …'+k.slice(-4)+').':'Google Maps is off. Using the free OpenStreetMap map (or the server key if the owner set one).'; }
+window.mapKeySave=function(){ const v=$('mapKeyIn').value.trim(); if(!/^AIza[0-9A-Za-z_\-]{20,}$/.test(v)) return toast('That does not look like a Google Maps API key (starts with AIza)'); localStorage.setItem('mapsKey',v); $('mapKeyIn').value=''; st(); toast('Saved. Reloading to switch to Google Maps…'); setTimeout(()=>location.reload(),900); };
+window.mapKeyRemove=function(){ localStorage.removeItem('mapsKey'); st(); toast('Back to the free map. Reloading…'); setTimeout(()=>location.reload(),900); };
+st();
+})();
+
+/* ================= SETTINGS TABS (separate slots inside Settings) ================= */
+(function(){
+const body=document.querySelector('#settingsModal .modal-body'); if(!body||body.dataset.tabs) return; body.dataset.tabs='1';
+const css=document.createElement('style');
+css.textContent='#stTabsBar{display:flex;gap:6px;overflow-x:auto;padding:0 0 10px;margin:0 0 10px;border-bottom:1px solid var(--bd);position:sticky;top:-12px;background:var(--bg);z-index:5;-webkit-overflow-scrolling:touch}#stTabsBar button{flex:none;border:1px solid #444;background:#1f1f1f;color:var(--tx);border-radius:20px;padding:8px 14px;font-size:13px;cursor:pointer;white-space:nowrap}#stTabsBar button.on{background:var(--ac);color:#fff;border-color:var(--hi)}.stPane{display:none}.stPane.on{display:block}';
+document.head.append(css);
+const TABS=[['look','🖼 Wallpaper'],['trans','🪟 Transparency'],['sec','🔒 Security'],['maps','🗺️ Maps'],['browser','🌐 Browser'],['notif','🔔 Alerts & TV']];
+const panes={}, bar=document.createElement('div'); bar.id='stTabsBar';
+TABS.forEach(([k,l],i)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=l; b.dataset.k=k; b.onclick=()=>show(k); bar.append(b); const p=document.createElement('div'); p.className='stPane'; p.dataset.k=k; panes[k]=p; });
+function show(k){ bar.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k)); Object.values(panes).forEach(p=>p.classList.toggle('on',p.dataset.k===k)); try{ localStorage.setItem('stTab',k); }catch(e){} body.scrollTop=0; }
+const kids=[...body.children], admin=kids.find(n=>n.id==='adminBtn');
+const where=t=>{ t=t||''; if(/Wallpaper|Theme color/.test(t)) return 'look'; if(/Lock screen/.test(t)) return 'sec'; if(/Browser/.test(t)) return 'browser'; if(/Maps/.test(t)) return 'maps'; if(/Notifications/.test(t)) return 'notif'; return null; };
+let cur='look';
+kids.forEach(n=>{
+  if(n===admin) return;
+  if(n.tagName==='H4'){ cur=where(n.textContent)||cur; panes[cur].append(n); return; }
+  if(n.querySelector&&n.querySelector('.pzDk')){ /* Personalize block: dock, widget, bars, notification pop-up, icons */
+    const tv=[...n.children]; let i=tv.findIndex(c=>c.tagName==='H4'&&/TV/.test(c.textContent));
+    if(i>=0){ const j=tv.findIndex((c,x)=>x>i&&c.tagName==='H4'); const grab=tv.slice(i,j<0?tv.length:j); const box=document.createElement('div'); grab.forEach(c=>box.append(c)); panes.notif.append(box); }
+    panes.trans.append(n); return; }
+  if(n.querySelector&&n.querySelector('h4')){ const h=n.querySelector('h4'); cur=where(h.textContent)||cur; panes[cur].append(n); return; }
+  panes[cur].append(n);
+});
+/* wallpaper tab also gets quick transparency shortcut note */
+body.prepend(bar); TABS.forEach(([k])=>body.append(panes[k]));
+if(admin) body.prepend(admin);
+let first='look'; try{ first=localStorage.getItem('stTab')||'look'; }catch(e){} if(!panes[first]) first='look'; show(first);
 })();
 </script>
 </body>
